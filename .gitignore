@@ -1,0 +1,6 @@
+l2pkt/l2pkt
+.gdbinit
+*.a
+*.o
+*.po
+*.pico
