@@ -4,6 +4,7 @@
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 #include <unistd.h>
 #include <netdb.h>
@@ -32,6 +33,7 @@ struct option long_options[] = {
 	{ "src",	required_argument, NULL, 0 },
 	{ "dst",	required_argument, NULL, 0 },
 	{ "proto",	required_argument, NULL, 0 },
+	{ "fragoff",	required_argument, NULL, 0 },
 	{ "srcport",	required_argument, NULL, 0 },
 	{ "dstport",	required_argument, NULL, 0 },
 	{ "ip4csum",	required_argument, NULL, 0 },
@@ -52,16 +54,20 @@ usage()
 	fprintf(stderr, "	--src <addr>		source address\n");
 	fprintf(stderr, "	--dst <addr>		destination address\n");
 	fprintf(stderr, "	--proto <proto>		protocol\n");
+	fprintf(stderr, "	--fragoff <offset>	fragment offset (default: 0)\n");
 	fprintf(stderr, "	--srcport <port>	source port\n");
 	fprintf(stderr, "	--dstport <port>	destination port\n");
-	fprintf(stderr, "	--ipcsum <sum>		specify IPv4 checksum\n");
-	fprintf(stderr, "	--l4csum <sum>		specify L4 checksum (TCP,UDP,ICMP)\n");
+	fprintf(stderr, "	--ip4csum <sum>		specify IPv4 checksum\n"
+			"				(adjusting with modifying ip_id)\n");
+	fprintf(stderr, "	--l4csum <sum>		specify L4 checksum (TCP,UDP,ICMP)\n"
+			"				(adjusting with modifying last 2 bytes of payload)\n");
 //	fprintf(stderr, "	--rsshash <hash>	specify rsshash\n");
 
-	fprintf(stderr, "	-T			fill 16byte timestamp string in end of packet\n");
+	fprintf(stderr, "	-T			fill 16byte timestamp string in the end of packet\n");
 	fprintf(stderr, "	-i <interface>		output interface\n");
 	fprintf(stderr, "	-n <npacket>		output N packets (default: 1)\n");
 	fprintf(stderr, "	-r			fill a packet with random data\n");
+	fprintf(stderr, "	-R <seed>		specify random seed (default: pid)\n");
 	fprintf(stderr, "	-f <framesize>		L2 frame size (default: packetsize + 14)\n");
 	fprintf(stderr, "	-s <packetsize>		L3 packet size (default: 46)\n");
 
@@ -143,6 +149,7 @@ main(int argc, char *argv[])
 	int bpf_fd, ch;
 	int bpf_hdrcmplt = 0;
 	int opt_timestamp = 0;
+	int opt_randseed = getpid();
 	int opt_random = 0;
 	int opt_protocol = IPPROTO_IP;
 	bool opt_ip4src = false;
@@ -150,6 +157,7 @@ main(int argc, char *argv[])
 	bool opt_srcport = false;
 	bool opt_dstport = false;
 	bool opt_X = false;
+	int opt_fragoff = 0;
 	int opt_ip4csum = -1;
 	int opt_l4csum = -1;
 	struct in_addr ip4src, ip4dst;
@@ -164,7 +172,7 @@ main(int argc, char *argv[])
 	memset(&eaddr_src, 0x00, sizeof(eaddr_src));
 	memset(&eaddr_dst, 0xff, sizeof(eaddr_dst));
 
-	while ((ch = getopt_long(argc, argv, "46D:S:TXf:i:t:n:rs:v", long_options, NULL)) != -1) {
+	while ((ch = getopt_long(argc, argv, "46DR:S:TXf:i:t:n:rs:v", long_options, NULL)) != -1) {
 		switch (ch) {
 		case 0:
 			if (optind < 2) {
@@ -200,6 +208,9 @@ main(int argc, char *argv[])
 					opt_dstport = true;
 					if (parseint(optarg, &dstport, 0, 65535) != 0)
 						errx(1, "invalid dstport: %s", optarg);
+				} else if (strcmp("--fragoff", optname) == 0) {
+					if (parsenum(optarg, &opt_fragoff, 0, 0xffff) != 0)
+						errx(1, "invalid fragment offset: %s", optarg);
 				} else if (strcmp("--ip4csum", optname) == 0) {
 					if (parsenum(optarg, &opt_ip4csum, 0, 0xffff) != 0)
 						errx(1, "invalid checksum: %s", optarg);
@@ -249,7 +260,11 @@ main(int argc, char *argv[])
 			break;
 		case 'n':
 			if (parseint(optarg, &npacket, 0, INT_MAX) != 0)
-				errx(1, "illegal number");
+				errx(1, "illegal number: %s", optarg);
+			break;
+		case 'R':
+			if (parsenum(optarg, &opt_randseed, 0, 0x7fffffff) != 0)
+				errx(1, "illegal number: %s", optarg);
 			break;
 		case 'r':
 			opt_random = 1;
@@ -302,6 +317,9 @@ main(int argc, char *argv[])
 	}
 
 	if (opt_random) {
+		if (opt_v)
+			printf("srand(%d)\n", opt_randseed);
+		srand(opt_randseed);
 		char *p = L2PKT_L2BUF(l2pkt);
 		for (i = 0; i < MAXFRAMESIZE; i++) {
 			p[i] = rand();
@@ -340,11 +358,7 @@ main(int argc, char *argv[])
 		}
 	}
 
-	/* build packet (static parameter) */
-	srand(getpid());
-
 	/* build packet (per packet parameter) */
-
 	if (family) {
 		switch (opt_protocol) {
 		case IPPROTO_UDP:
@@ -361,9 +375,16 @@ main(int argc, char *argv[])
 			break;
 		}
 
+//XXX:DEBUG
 //		l2pkt_ip4_off(l2pkt, 1234);
 //		l2pkt_ip4_id(l2pkt, 0x8765);
 //		l2pkt_ip4_ttl(l2pkt, 123);
+
+//XXX:DEBUG
+//		if (opt_protocol == IPPROTO_TCP) {
+//			l2pkt_tcpseq(l2pkt, 0x12345678);
+//			l2pkt_tcpack(l2pkt, 0xabcdef01);
+//		}
 
 		if (opt_ip4src)
 			l2pkt_ip4_src(l2pkt, ip4src.s_addr);
@@ -375,60 +396,26 @@ main(int argc, char *argv[])
 			l2pkt_ip4_dstport(l2pkt, dstport);
 
 		if (opt_l4csum >= 0) {
-			struct ip *ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-			switch (ip->ip_p) {
-			case IPPROTO_ICMP:
-				{
-					struct icmp *icmp = (struct icmp *)L2PKT_L4BUF(l2pkt);
-					int icmplen = packetsize - sizeof(struct ip);
-					int icmppayloadlen = icmplen - sizeof(struct icmp);
-					if (icmppayloadlen < 2)
-						errx(5, "no space in ICMP to adjust checksum. increase packetsize");
+			int l4hdrlen = l2pkt_getl4hdrlength(l2pkt);
+			int l4len = l2pkt_getl4length(l2pkt);
+			if ((l4len - l4hdrlen) < sizeof(uint16_t))
+				errx(5, "no space in L4 payload for adjusting checksum. increase packetsize");
 
-					uint16_t x = htons(opt_l4csum);
-					l2pkt_ip4_l4writedata(l2pkt, icmppayloadlen - 2, (char *)&x, sizeof(uint16_t));
+			/* write a checksum you want as payload data with adjusting checksum */
+			uint16_t ucsum = htons(opt_l4csum);
+			l2pkt_l4write(l2pkt, l4len - 2, (char *)&ucsum, 2);
 
-					uint16_t *p = (uint16_t *)((char *)icmp + icmplen - 2);
-					x = icmp->icmp_cksum;
-					icmp->icmp_cksum = *p;
-					*p = x;
-				}
-				break;
-			case IPPROTO_TCP:
-				{
-					struct tcphdr *tcp = (struct tcphdr *)L2PKT_L4BUF(l2pkt);
-					int tcplen = packetsize - sizeof(struct ip);
-					int tcppayloadlen = tcplen - sizeof(struct tcphdr);
-					if (tcppayloadlen < 2)
-						errx(5, "no space in TCP to adjust checksum. increase packetsize");
+			uint16_t ocsum;
+			l2pkt_l4read(l2pkt, l2pkt_getl4csumoffset(l2pkt), (char *)&ocsum, 2);
 
-					uint16_t x = htons(opt_l4csum);
-					l2pkt_ip4_l4writedata(l2pkt, tcppayloadlen - 2, (char *)&x, sizeof(uint16_t));
+			/* swap l4csum and payload data */
+			int l4csumoff = l2pkt_getl4csumoffset(l2pkt);
+			l2pkt_l4write_raw(l2pkt, l4csumoff, (char *)&ucsum, 2);
+			l2pkt_l4write_raw(l2pkt, l4len - 2, (char *)&ocsum, 2);
+		}
 
-					uint16_t *p = (uint16_t *)((char *)tcp + tcplen - 2);
-					x = tcp->th_sum;
-					tcp->th_sum = *p;
-					*p = x;
-				}
-				break;
-			case IPPROTO_UDP:
-				{
-					struct udphdr *udp = (struct udphdr *)L2PKT_L4BUF(l2pkt);
-					int udplen = packetsize - sizeof(struct ip);
-					int udppayloadlen = udplen - sizeof(struct udphdr);
-					if (udppayloadlen < 2)
-						errx(5, "no space in UDP to adjust checksum. increase packetsize");
-
-					uint16_t x = htons(opt_l4csum);
-					l2pkt_ip4_l4writedata(l2pkt, udppayloadlen - 2, (char *)&x, sizeof(uint16_t));
-
-					uint16_t *p = (uint16_t *)((char *)udp + udplen - 2);
-					x = udp->uh_sum;
-					udp->uh_sum = *p;
-					*p = x;
-				}
-				break;
-			}
+		if (opt_fragoff != 0) {
+			l2pkt_ip4_off(l2pkt, opt_fragoff);
 		}
 
 		if (opt_ip4csum >= 0) {
@@ -440,10 +427,15 @@ main(int argc, char *argv[])
 		}
 	}
 
+	if (opt_v) {
+		printf("framesize:  %d bytes\n", framesize);
+		printf("packetsize: %d bytes\n", packetsize);
+	}
+
 	for (nsend = 0; nsend < npacket; nsend++) {
 		if (opt_X) {
 			printf("L2 framesize = %d, L3 packetsize = %d\n", framesize, packetsize);
-			packetdump(L2PKT_L2BUF(l2pkt), framesize);
+			packetdump(L2PKT_L2BUF(l2pkt), framesize + 32);
 		}
 
 		r = write(bpf_fd, L2PKT_L2BUF(l2pkt), L2PKT_L2SIZE(l2pkt));

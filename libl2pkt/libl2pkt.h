@@ -53,7 +53,6 @@ struct l2pkt {
 #define L2PKT_BUFFER(pkt)	((pkt)->buf)
 #define L2PKT_L2BUF(pkt)	L2PKT_BUFFER((pkt))
 #define L2PKT_L3BUF(pkt)	(L2PKT_L2BUF((pkt)) + sizeof(struct ether_header))
-#define L2PKT_L4BUF(pkt)	(L2PKT_L3BUF((pkt)) + sizeof(struct ip))
 
 #define L2PKT_L2SIZE(pkt)	((pkt)->framesize)
 #define L2PKT_L3SIZE(pkt)	(L2PKT_L2SIZE((pkt)) - sizeof(struct ether_header))
@@ -136,32 +135,40 @@ int l2pkt_ip4_src(struct l2pkt *, in_addr_t);
 int l2pkt_ip4_dst(struct l2pkt *, in_addr_t);
 
 int l2pkt_ip4_proto_template(struct l2pkt *, uint8_t, uint16_t);
-
 int l2pkt_ip4_icmp_template(struct l2pkt *, uint16_t);
-//int l2pkt_ip4_icmptype(struct l2pkt *, uint8_t);
-//int l2pkt_ip4_icmpcode(struct l2pkt *, uint8_t);
-//int l2pkt_ip4_icmpid(struct l2pkt *, uint16_t);
-//int l2pkt_ip4_icmpseq(struct l2pkt *, uint16_t);
-
 int l2pkt_ip4_udp_template(struct l2pkt *, uint16_t);
 int l2pkt_ip4_tcp_template(struct l2pkt *, uint16_t);
-//int l2pkt_ip4_tcpseq(struct l2pkt *, uint32_t);
-//int l2pkt_ip4_tcpack(struct l2pkt *, uint32_t);
-//int l2pkt_ip4_tcpflags(struct l2pkt *, int);
-//int l2pkt_ip4_tcpwin(struct l2pkt *, uint16_t);
-//int l2pkt_ip4_tcpurp(struct l2pkt *, uint16_t);
 
 int l2pkt_ip4_srcport(struct l2pkt *, uint16_t);
 int l2pkt_ip4_dstport(struct l2pkt *, uint16_t);
-int l2pkt_ip4_l4writedata(struct l2pkt *, unsigned int, char *, unsigned int);
 
+int l2pkt_getl3length(struct l2pkt *);
+int l2pkt_getl3hdrlength(struct l2pkt *);
+int l2pkt_getl4length(struct l2pkt *);
+int l2pkt_getl4hdrlength(struct l2pkt *);
+int l2pkt_getl4csumoffset(struct l2pkt *);
+int l2pkt_l4write(struct l2pkt *, unsigned int, char *, unsigned int);
+int l2pkt_l4write_raw(struct l2pkt *, unsigned int, char *, unsigned int);
+int l2pkt_l4write_1(struct l2pkt *, unsigned int, uint8_t);
+int l2pkt_l4write_2(struct l2pkt *, unsigned int, uint16_t);
+int l2pkt_l4write_4(struct l2pkt *, unsigned int, uint32_t);
+int l2pkt_l4read(struct l2pkt *, unsigned int, char *, unsigned int);
+uint8_t l2pkt_l4read_1(struct l2pkt *, unsigned int);
+uint16_t l2pkt_l4read_2(struct l2pkt *, unsigned int);
+uint32_t l2pkt_l4read_4(struct l2pkt *, unsigned int);
 
-//int l2pkt_ip4_writedata(struct l2pkt *, unsigned int, char *, unsigned int);
-//int l2pkt_ip4_readdata(struct l2pkt *, unsigned int, char *, unsigned int);
-//char *l2pkt_ip4_getptr(struct l2pkt *, unsigned int);
-//
+int l2pkt_icmptype(struct l2pkt *, uint8_t);
+int l2pkt_icmpcode(struct l2pkt *, uint8_t);
+int l2pkt_icmpid(struct l2pkt *, uint16_t);
+int l2pkt_icmpseq(struct l2pkt *, uint16_t);
+
+int l2pkt_tcpseq(struct l2pkt *, uint32_t);
+int l2pkt_tcpack(struct l2pkt *, uint32_t);
+int l2pkt_tcpflags(struct l2pkt *, uint8_t);
+int l2pkt_tcpwin(struct l2pkt *, uint16_t);
+int l2pkt_tcpurp(struct l2pkt *, uint16_t);
+
 //int l2pkt_ip4_test_cksum(struct l2pkt *, unsigned int);
-
 
 ///* ip6pkt.c */
 //int l2pkt_ip6pkt_neighbor_parse(struct l2pkt *, int *, struct ether_addr *, struct in6_addr *);

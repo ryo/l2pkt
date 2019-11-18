@@ -5,6 +5,7 @@ INTERNALLIB=
 SRCS+=	l2pkt.c
 SRCS+=	etherpkt.c
 SRCS+=	ip4pkt.c
+SRCS+=	l4pkt.c
 SRCS+=	utils.c
 SRCS+=	tcpdumpfile.c
 
