@@ -105,123 +105,33 @@ in_cksum(unsigned int sum0, char *data, unsigned int len)
 }
 #else /* USE_CPU_IN_CKSUM */
 unsigned int
-in_cksum(unsigned int sum0, char *data, unsigned int len)
+in_cksum(unsigned int sum, char *data, unsigned int len)
 {
-	uint64_t sum, partial;
-	unsigned int final_acc;
-	int needs_swap, started_on_odd;
-
-	needs_swap = 0;
-	started_on_odd = 0;
-	sum = sum0;
-
-	partial = 0;
 	if ((uintptr_t)data & 1) {
-		/* Align on word boundary */
-		started_on_odd = !started_on_odd;
 #if _BYTE_ORDER == _LITTLE_ENDIAN
-		partial = *data << 8;
+		sum += *(uint8_t *)data++ << 8;
 #else
-		partial = *data;
+		sum += *(uint8_t *)data++;
 #endif
-		++data;
-		--len;
+		len--;
 	}
-	needs_swap = started_on_odd;
-	if ((uintptr_t)data & 2) {
-		if (len < 2)
-			goto trailing_bytes;
-		partial += *(uint16_t *)data;
+
+	while (len >= 2) {
+		sum += *(uint16_t *)data;
 		data += 2;
 		len -= 2;
 	}
-	while (len >= 64) {
-		__builtin_prefetch(data + 32);
-		__builtin_prefetch(data + 64);
-		partial += *(uint32_t *)data;
-		partial += *(uint32_t *)(data + 4);
-		partial += *(uint32_t *)(data + 8);
-		partial += *(uint32_t *)(data + 12);
-		partial += *(uint32_t *)(data + 16);
-		partial += *(uint32_t *)(data + 20);
-		partial += *(uint32_t *)(data + 24);
-		partial += *(uint32_t *)(data + 28);
-		partial += *(uint32_t *)(data + 32);
-		partial += *(uint32_t *)(data + 36);
-		partial += *(uint32_t *)(data + 40);
-		partial += *(uint32_t *)(data + 44);
-		partial += *(uint32_t *)(data + 48);
-		partial += *(uint32_t *)(data + 52);
-		partial += *(uint32_t *)(data + 56);
-		partial += *(uint32_t *)(data + 60);
-		data += 64;
-		len -= 64;
-		if (__predict_false(partial & (3ULL << 62))) {
-			if (needs_swap)
-				partial = (partial << 8) + (partial >> 56);
-			sum += (partial >> 32);
-			sum += (partial & 0xffffffff);
-			partial = 0;
-		}
-	}
-	/*
-	 * len is not updated below as the remaining tests
-	 * are using bit masks, which are not affected.
-	 */
-	if (len & 32) {
-		partial += *(uint32_t *)data;
-		partial += *(uint32_t *)(data + 4);
-		partial += *(uint32_t *)(data + 8);
-		partial += *(uint32_t *)(data + 12);
-		partial += *(uint32_t *)(data + 16);
-		partial += *(uint32_t *)(data + 20);
-		partial += *(uint32_t *)(data + 24);
-		partial += *(uint32_t *)(data + 28);
-		data += 32;
-	}
-	if (len & 16) {
-		partial += *(uint32_t *)data;
-		partial += *(uint32_t *)(data + 4);
-		partial += *(uint32_t *)(data + 8);
-		partial += *(uint32_t *)(data + 12);
-		data += 16;
-	}
-	if (len & 8) {
-		partial += *(uint32_t *)data;
-		partial += *(uint32_t *)(data + 4);
-		data += 8;
-	}
-	if (len & 4) {
-		partial += *(uint32_t *)data;
-		data += 4;
-	}
-	if (len & 2) {
-		partial += *(uint16_t *)data;
-		data += 2;
-	}
- trailing_bytes:
+
 	if (len & 1) {
 #if _BYTE_ORDER == _LITTLE_ENDIAN
-		partial += *data;
+		sum += *(uint8_t *)data++;
 #else
-		partial += *data << 8;
+		sum += *(uint8_t *)data++ << 8;
 #endif
-		started_on_odd = !started_on_odd;
 	}
 
-	if (needs_swap)
-		partial = (partial << 8) + (partial >> 56);
-	sum += (partial >> 32) + (partial & 0xffffffff);
-	/*
-	 * Reduce sum to allow potential byte swap
-	 * in the next iteration without carry.
-	 */
-	sum = (sum >> 32) + (sum & 0xffffffff);
-
-	final_acc = (sum >> 48) + ((sum >> 32) & 0xffff) +
-	    ((sum >> 16) & 0xffff) + (sum & 0xffff);
-	final_acc = (final_acc >> 16) + (final_acc & 0xffff);
-	final_acc = (final_acc >> 16) + (final_acc & 0xffff);
-	return ~final_acc & 0xffff;
+	sum = (sum >> 16) + (sum & 0xffff);
+	sum = (sum >> 16) + (sum & 0xffff);
+	return ~(sum & 0xffff);
 }
 #endif /* USE_CPU_IN_CKSUM */
