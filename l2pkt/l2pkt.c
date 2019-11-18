@@ -27,17 +27,22 @@
 int bpf_open(const char *);
 
 static int opt_v;
+static int opt_bad_ip4csum = 0;
+static int opt_bad_l4csum = 0;
 static struct l2pkt *l2pkt;
 
+
 struct option long_options[] = {
-	{ "src",	required_argument, NULL, 0 },
-	{ "dst",	required_argument, NULL, 0 },
-	{ "proto",	required_argument, NULL, 0 },
-	{ "fragoff",	required_argument, NULL, 0 },
-	{ "srcport",	required_argument, NULL, 0 },
-	{ "dstport",	required_argument, NULL, 0 },
-	{ "ip4csum",	required_argument, NULL, 0 },
-	{ "l4csum",	required_argument, NULL, 0 },
+	{ "src",		required_argument,	NULL, 0 },
+	{ "dst",		required_argument,	NULL, 0 },
+	{ "proto",		required_argument,	NULL, 0 },
+	{ "fragoff",		required_argument,	NULL, 0 },
+	{ "srcport",		required_argument,	NULL, 0 },
+	{ "dstport",		required_argument,	NULL, 0 },
+	{ "ip4csum",		required_argument,	NULL, 0 },
+	{ "bad-ip4csum",	no_argument,		&opt_bad_ip4csum, 1 },
+	{ "l4csum",		required_argument,	NULL, 0 },
+	{ "bad-l4csum",		no_argument,		&opt_bad_l4csum, 1 },
 	{ 0, 0, 0, 0 }
 };
 
@@ -59,8 +64,11 @@ usage()
 	fprintf(stderr, "	--dstport <port>	destination port\n");
 	fprintf(stderr, "	--ip4csum <sum>		specify IPv4 checksum\n"
 			"				(adjusting with modifying ip_id)\n");
+	fprintf(stderr, "	--bad-ip4csum		don't adjust IPv4 checksum\n");
 	fprintf(stderr, "	--l4csum <sum>		specify L4 checksum (TCP,UDP,ICMP)\n"
 			"				(adjusting with modifying last 2 bytes of payload)\n");
+	fprintf(stderr, "	--bad-l4csum		don't adjust L4 checksum\n");
+
 //	fprintf(stderr, "	--rsshash <hash>	specify rsshash\n");
 
 	fprintf(stderr, "	-T			fill 16byte timestamp string in the end of packet\n");
@@ -181,7 +189,10 @@ main(int argc, char *argv[])
 				const char *optname;
 				optname = argv[optind - 2];
 
-				//printf("DEBUG: longopt: %s = %s\n", optname, optarg);
+				if (optarg == NULL)
+					break;
+
+//				printf("DEBUG: longopt: optind=%d, %s = %s\n", optind, optname, optarg);
 
 				if (strcmp("--proto", optname) == 0) {
 					struct protoent *pe;
@@ -401,17 +412,23 @@ main(int argc, char *argv[])
 			if ((l4len - l4hdrlen) < sizeof(uint16_t))
 				errx(5, "no space in L4 payload for adjusting checksum. increase packetsize");
 
-			/* write a checksum you want as payload data with adjusting checksum */
-			uint16_t ucsum = htons(opt_l4csum);
-			l2pkt_l4write(l2pkt, l4len - 2, (char *)&ucsum, 2);
+			if (opt_bad_l4csum) {
+				uint16_t ucsum = htons(opt_l4csum);
+				int l4csumoff = l2pkt_getl4csumoffset(l2pkt);
+				l2pkt_l4write_raw(l2pkt, l4csumoff, (char *)&ucsum, 2);
+			} else {
+				/* write a checksum you want as payload data with adjusting checksum */
+				uint16_t ucsum = htons(opt_l4csum);
+				l2pkt_l4write(l2pkt, l4len - 2, (char *)&ucsum, 2);
 
-			uint16_t ocsum;
-			l2pkt_l4read(l2pkt, l2pkt_getl4csumoffset(l2pkt), (char *)&ocsum, 2);
+				uint16_t ocsum;
+				l2pkt_l4read(l2pkt, l2pkt_getl4csumoffset(l2pkt), (char *)&ocsum, 2);
 
-			/* swap l4csum and payload data */
-			int l4csumoff = l2pkt_getl4csumoffset(l2pkt);
-			l2pkt_l4write_raw(l2pkt, l4csumoff, (char *)&ucsum, 2);
-			l2pkt_l4write_raw(l2pkt, l4len - 2, (char *)&ocsum, 2);
+				/* swap l4csum and payload data */
+				int l4csumoff = l2pkt_getl4csumoffset(l2pkt);
+				l2pkt_l4write_raw(l2pkt, l4csumoff, (char *)&ucsum, 2);
+				l2pkt_l4write_raw(l2pkt, l4len - 2, (char *)&ocsum, 2);
+			}
 		}
 
 		if (opt_fragoff != 0) {
@@ -419,11 +436,16 @@ main(int argc, char *argv[])
 		}
 
 		if (opt_ip4csum >= 0) {
-			struct ip *ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-			l2pkt_ip4_id(l2pkt, opt_ip4csum);
-			uint16_t tmp = ip->ip_id;
-			ip->ip_id = ip->ip_sum;
-			ip->ip_sum = tmp;
+			if (opt_bad_ip4csum) {
+				struct ip *ip = (struct ip *)L2PKT_L3BUF(l2pkt);
+				ip->ip_sum = htons(opt_ip4csum);
+			} else {
+				struct ip *ip = (struct ip *)L2PKT_L3BUF(l2pkt);
+				l2pkt_ip4_id(l2pkt, opt_ip4csum);
+				uint16_t tmp = ip->ip_id;
+				ip->ip_id = ip->ip_sum;
+				ip->ip_sum = tmp;
+			}
 		}
 	}
 
