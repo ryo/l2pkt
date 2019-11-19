@@ -76,8 +76,8 @@ usage()
 	fprintf(stderr, "	-n <npacket>		output N packets (default: 1)\n");
 	fprintf(stderr, "	-r			fill a packet with random data\n");
 	fprintf(stderr, "	-R <seed>		specify random seed (default: pid)\n");
-	fprintf(stderr, "	-f <framesize>		L2 frame size (default: packetsize + 14)\n");
-	fprintf(stderr, "	-s <packetsize>		L3 packet size (default: 46)\n");
+	fprintf(stderr, "	-f <framesize>		L2 frame size (default: 60 or (packetsize + 14))\n");
+	fprintf(stderr, "	-s <packetsize>		L3 packet size (default: 46 or (framesize - 14))\n");
 
 	fprintf(stderr, "	-t <ethertype>		ethernet type (default: 0x88b5)\n");
 	fprintf(stderr, "	-v			verbose\n");
@@ -310,7 +310,7 @@ main(int argc, char *argv[])
 	} else if (packetsize == -1) {
 		packetsize = framesize - sizeof(struct ether_header);
 	} else if (framesize < packetsize + sizeof(struct ether_header)) {
-		errx(1, "framesize (%d) must be greater than packetsize (%d) + 14", framesize, packetsize);
+		fprintf(stderr, "Warning: framesize (%d) is greater than packetsize (%d) + 14\n", framesize, packetsize);
 	}
 
 
