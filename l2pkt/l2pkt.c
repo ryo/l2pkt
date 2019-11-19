@@ -180,7 +180,7 @@ main(int argc, char *argv[])
 	memset(&eaddr_src, 0x00, sizeof(eaddr_src));
 	memset(&eaddr_dst, 0xff, sizeof(eaddr_dst));
 
-	while ((ch = getopt_long(argc, argv, "46DR:S:TXf:i:t:n:rs:v", long_options, NULL)) != -1) {
+	while ((ch = getopt_long(argc, argv, "46D:R:S:TXf:i:t:n:rs:v", long_options, NULL)) != -1) {
 		switch (ch) {
 		case 0:
 			if (optind < 2) {
