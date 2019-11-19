@@ -203,6 +203,7 @@ main(int argc, char *argv[])
 						if (parsenum(optarg, &opt_protocol, 0, 255) != 0)
 							errx(1, "illegal protocol: %s", optarg);
 					}
+					endprotoent();
 				} else if (strcmp("--src", optname) == 0) {
 					opt_ip4src = true;
 					if (inet_aton(optarg, &ip4src) == 0)
