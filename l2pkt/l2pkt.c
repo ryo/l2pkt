@@ -111,7 +111,7 @@ parseint(const char *str, int *v, int min, int max)
 }
 
 static int
-parsehex(const char *str, int *v, int min, int max)
+parsehex(const char *str, int *v, unsigned int min, unsigned int max)
 {
 	long long int x;
 	char *ep = NULL;
@@ -129,7 +129,7 @@ parsehex(const char *str, int *v, int min, int max)
 }
 
 static int
-parsenum(const char *str, int *v, int min, int max)
+parsenum(const char *str, int *v, unsigned int min, unsigned int max)
 {
 	long long int x;
 	char *ep = NULL;
