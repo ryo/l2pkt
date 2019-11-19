@@ -74,7 +74,7 @@ usage()
 			"				(adjusting with modifying last 2 bytes of payload)\n");
 	fprintf(stderr, "	--bad-l4csum		don't adjust L4 checksum\n");
 	fprintf(stderr, "	--rsshash2 <idx>/<mod>	specify 2-tuple rsshash with modifying source addr\n");
-	fprintf(stderr, "	--rsshash4 <idx>/<mod>	specify 4-tuple rsshash with modifying source port\n");
+	fprintf(stderr, "	--rsshash4 <idx>/<mod>	specify 4-tuple rsshash with modifying source port/addr\n");
 	fprintf(stderr, "	-T			fill 16byte timestamp string in the end of packet\n");
 	fprintf(stderr, "	-i <interface>		output interface\n");
 	fprintf(stderr, "	-n <npacket>		output N packets (default: 1)\n");
@@ -95,6 +95,21 @@ inaddr(const char *s)
 	inet_aton(s, &in);
 	return in.s_addr;
 }
+
+static char *
+strinaddr(struct in_addr *in)
+{
+	static int idx = 0;
+	static char buf[8][sizeof("255.255.255.255")];
+	char *p;
+
+	idx = (idx + 1) % 8;
+	p = buf[idx];
+
+	inet_ntop(AF_INET, in, p, sizeof(buf[0]));
+	return p;
+}
+
 
 static int
 parseint(const char *str, int *v, int min, int max)
@@ -446,6 +461,89 @@ main(int argc, char *argv[])
 		if (opt_dstport)
 			l2pkt_ip4_dstport(l2pkt, dstport);
 
+		if (opt_fragoff != 0) {
+			l2pkt_ip4_off(l2pkt, opt_fragoff);
+		}
+
+		if (opt_rsshash2mod != 0) {
+			struct in_addr src, dst;
+			uint32_t hash, i;
+
+			l2pkt_extract(l2pkt);
+			src = l2pkt->info.src4;
+			dst = l2pkt->info.dst4;
+
+			for (i = 0; ; i++) {
+				hash = toeplitz_hash(rsskey, sizeof(rsskey), 
+				    &src, sizeof(src),
+				    &dst, sizeof(dst),
+				    NULL);
+				if ((hash % opt_rsshash2mod) == opt_rsshash2idx) {
+					if (opt_v) {
+						fprintf(stderr, "Found rsshash2(%s,%s): 0x%08x %% 0x%08x == 0x%08x   \n",
+						    strinaddr(&src), strinaddr(&dst),
+						    hash, opt_rsshash2mod, opt_rsshash2idx);
+					}
+					break;
+				}
+				if (opt_v & ((i & 255) == 0)) {
+					fprintf(stderr, "checking rsshash2(%s,%s): 0x%08x %% 0x%08x == 0x%08x   \r",
+					    strinaddr(&src), strinaddr(&dst),
+					    hash, opt_rsshash2mod, opt_rsshash2idx);
+				}
+
+				src.s_addr = htonl(ntohl(src.s_addr) + 1);
+			}
+			l2pkt_ip4_src(l2pkt, src.s_addr);
+		}
+
+		if (opt_rsshash4mod != 0) {
+			if (!PROTO_HAS_PORT(opt_protocol))
+				errx(1, "--rsshash4 requires --proto tcp or --proto udp");
+
+			struct in_addr src, dst;
+			uint16_t sport, dport;
+			uint32_t hash, i, j;
+
+			l2pkt_extract(l2pkt);
+			src = l2pkt->info.src4;
+			dst = l2pkt->info.dst4;
+			sport = l2pkt->info.sport;
+			dport = l2pkt->info.dport;
+			
+
+			for (j = 0; j < 65536; j++) {
+				for (i = 0; i < 65536; i++) {
+					hash = toeplitz_hash(rsskey, sizeof(rsskey), 
+					    &src, sizeof(src),
+					    &dst, sizeof(dst),
+					    &sport, sizeof(sport),
+					    &dport, sizeof(dport),
+					    NULL);
+					if ((hash % opt_rsshash4mod) == opt_rsshash4idx) {
+						if (opt_v) {
+							fprintf(stderr, "Found rsshash4(%s,%s,%d,%d): 0x%08x %% 0x%08x == 0x%08x     \n",
+							    strinaddr(&src), strinaddr(&dst), ntohs(sport), ntohs(dport),
+							    hash, opt_rsshash4mod, opt_rsshash4idx);
+						}
+						goto found;
+					}
+					if (opt_v & ((i & 255) == 0)) {
+						fprintf(stderr, "checking rsshash4(%s,%s,%d,%d): 0x%08x %% 0x%08x != 0x%08x     \r",
+						    strinaddr(&src), strinaddr(&dst), ntohs(sport), ntohs(dport),
+						    hash, opt_rsshash4mod, opt_rsshash4idx);
+					}
+					sport = htons(ntohs(sport) + 1);
+				}
+				dport = htons(ntohs(dport) + 1);
+			}
+			fprintf(stderr, "\n");
+			err(5, "tupple4: %08x/%08x hash not found\n", opt_rsshash4mod, opt_rsshash4idx);
+ found:
+			l2pkt_ip4_srcport(l2pkt, ntohs(sport));
+			l2pkt_ip4_dstport(l2pkt, ntohs(dport));
+		}
+
 		if (opt_l4csum >= 0) {
 			int l4hdrlen = l2pkt_getl4hdrlength(l2pkt);
 			int l4len = l2pkt_getl4length(l2pkt);
@@ -469,58 +567,6 @@ main(int argc, char *argv[])
 				l2pkt_l4write_raw(l2pkt, l4csumoff, (char *)&ucsum, 2);
 				l2pkt_l4write_raw(l2pkt, l4len - 2, (char *)&ocsum, 2);
 			}
-		}
-
-		if (opt_fragoff != 0) {
-			l2pkt_ip4_off(l2pkt, opt_fragoff);
-		}
-
-		if (opt_rsshash2mod != 0) {
-			struct in_addr src, dst;
-			uint32_t hash, i;
-
-			l2pkt_extract(l2pkt);
-			src = l2pkt->info.src4;
-			dst = l2pkt->info.dst4;
-
-			for (i = 0; ; i++) {
-				src.s_addr = htonl(ntohl(src.s_addr) + 1);
-				hash = toeplitz_hash(rsskey, sizeof(rsskey), 
-				    &src, sizeof(src),
-				    &dst, sizeof(dst),
-				    NULL);
-				if ((hash % opt_rsshash2mod) == opt_rsshash2idx)
-					break;
-			}
-			l2pkt_ip4_src(l2pkt, src.s_addr);
-		}
-
-		if (opt_rsshash4mod != 0) {
-			if (!PROTO_HAS_PORT(opt_protocol))
-				errx(1, "--rsshash4 requires --proto tcp or --proto udp");
-
-			struct in_addr src, dst;
-			uint16_t sport, dport;
-			uint32_t hash, i;
-
-			l2pkt_extract(l2pkt);
-			src = l2pkt->info.src4;
-			dst = l2pkt->info.dst4;
-			sport = l2pkt->info.sport;
-			dport = l2pkt->info.dport;
-
-			for (i = 0; ; i++) {
-				sport = htons(ntohs(sport) + 1);
-				hash = toeplitz_hash(rsskey, sizeof(rsskey), 
-				    &src, sizeof(src),
-				    &dst, sizeof(dst),
-				    &sport, sizeof(sport),
-				    &dport, sizeof(dport),
-				    NULL);
-				if ((hash % opt_rsshash4mod) == opt_rsshash4idx)
-					break;
-			}
-			l2pkt_ip4_srcport(l2pkt, ntohs(sport));
 		}
 
 		if (opt_ip4csum >= 0) {
@@ -554,28 +600,30 @@ main(int argc, char *argv[])
 			endprotoent();
 
 			if (PROTO_HAS_PORT(l2pkt->info.proto)) {
-				printf("%s:%d -> ", inet_ntoa(l2pkt->info.src4), ntohs(l2pkt->info.sport));
-				printf("%s:%d\n", inet_ntoa(l2pkt->info.dst4), ntohs(l2pkt->info.dport));
+				printf("%s:%d -> %s:%d\n",
+				    strinaddr(&l2pkt->info.src4), ntohs(l2pkt->info.sport),
+				    strinaddr(&l2pkt->info.dst4), ntohs(l2pkt->info.dport));
 			} else {
-				printf("%s -> ", inet_ntoa(l2pkt->info.src4));
-				printf("%s\n", inet_ntoa(l2pkt->info.dst4));
+				printf("%s -> %s\n",
+				    strinaddr(&l2pkt->info.src4),
+				    strinaddr(&l2pkt->info.dst4));
 			}
 
 			uint32_t hash = toeplitz_hash(rsskey, sizeof(rsskey), 
 			    &l2pkt->info.src4, sizeof(l2pkt->info.src4),
 			    &l2pkt->info.dst4, sizeof(l2pkt->info.dst4),
 			    NULL);
-			uint32_t hash_p = toeplitz_hash(rsskey, sizeof(rsskey), 
-			    &l2pkt->info.src4, sizeof(l2pkt->info.src4),
-			    &l2pkt->info.dst4, sizeof(l2pkt->info.dst4),
-			    &l2pkt->info.sport, sizeof(l2pkt->info.sport),
-			    &l2pkt->info.dport, sizeof(l2pkt->info.dport),
-			    NULL);
-
-
 			printf("RssHash(2-tuple): 0x%08x\n", hash);
-			if (PROTO_HAS_PORT(l2pkt->info.proto))
+
+			if (PROTO_HAS_PORT(l2pkt->info.proto)) {
+				uint32_t hash_p = toeplitz_hash(rsskey, sizeof(rsskey), 
+				    &l2pkt->info.src4, sizeof(l2pkt->info.src4),
+				    &l2pkt->info.dst4, sizeof(l2pkt->info.dst4),
+				    &l2pkt->info.sport, sizeof(l2pkt->info.sport),
+				    &l2pkt->info.dport, sizeof(l2pkt->info.dport),
+				    NULL);
 				printf("RssHash(4-tuple): 0x%08x\n", hash_p);
+			}
 
 		} else {
 			// XXX: not yet IPv6
