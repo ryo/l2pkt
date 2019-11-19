@@ -46,6 +46,14 @@
 #define LIBL2PKT_MAXPKTSIZE	(1024 * 64)
 
 struct l2pkt {
+	struct {
+		int family;
+		struct in_addr src4, dst4;
+		struct in6_addr src6, dst6;
+		uint16_t sport, dport;
+		uint8_t proto;
+	} info;
+
 	unsigned int framesize;
 	char buf[LIBL2PKT_MAXPKTSIZE + 1024];
 };
@@ -141,6 +149,8 @@ int l2pkt_ip4_tcp_template(struct l2pkt *, uint16_t);
 
 int l2pkt_ip4_srcport(struct l2pkt *, uint16_t);
 int l2pkt_ip4_dstport(struct l2pkt *, uint16_t);
+
+int l2pkt_extract(struct l2pkt *);	/* extract to l2pkt->info */
 
 int l2pkt_getl3length(struct l2pkt *);
 int l2pkt_getl3hdrlength(struct l2pkt *);

@@ -138,6 +138,36 @@ l2pkt_getl4csumoffset(struct l2pkt *l2pkt)
 	return -1;
 }
 
+int
+l2pkt_extract(struct l2pkt *l2pkt)
+{
+	struct ip *ip;
+
+	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
+	if (ip->ip_v != IPVERSION) {
+		return -1;	// XXX: IPv6 not yet
+	}
+
+	l2pkt->info.family = 4;
+	l2pkt->info.proto = ip->ip_p;
+	memcpy(&l2pkt->info.src4, &ip->ip_src, sizeof(struct in_addr));
+	memcpy(&l2pkt->info.dst4, &ip->ip_dst, sizeof(struct in_addr));
+
+	switch (ip->ip_p) {
+	case IPPROTO_UDP:
+		l2pkt_l4read(l2pkt, offsetof(struct udphdr, uh_sport), (char *)&l2pkt->info.sport, sizeof(uint16_t));
+		l2pkt_l4read(l2pkt, offsetof(struct udphdr, uh_dport), (char *)&l2pkt->info.dport, sizeof(uint16_t));
+		break;
+	case IPPROTO_TCP:
+		l2pkt_l4read(l2pkt, offsetof(struct tcphdr, th_sport), (char *)&l2pkt->info.sport, sizeof(uint16_t));
+		l2pkt_l4read(l2pkt, offsetof(struct tcphdr, th_dport), (char *)&l2pkt->info.dport, sizeof(uint16_t));
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+
 /* write data with adjusting checksum */
 int
 l2pkt_l4write(struct l2pkt *l2pkt, unsigned int offset, char *data, unsigned int datalen)
