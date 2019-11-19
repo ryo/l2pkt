@@ -1,5 +1,5 @@
 PROG=	l2pkt
-SRCS=	l2pkt.c
+SRCS=	l2pkt.c toeplitz_hash.c
 
 CFLAGS+=	-I../libl2pkt
 LDADD+=		../libl2pkt/libl2pkt.a
