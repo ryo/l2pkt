@@ -58,6 +58,28 @@ l2pkt_getl3hdrlength(struct l2pkt *l2pkt)
 	if (ip->ip_v == IPVERSION) {
 		return (ip->ip_hl * 4);
 	}
+	if (ip->ip_v == 6) {
+		return sizeof(struct ip6_hdr);	/* XXX */
+	}
+
+	return 0;
+}
+
+int
+l2pkt_getl4protocol(struct l2pkt *l2pkt)
+{
+	struct ip *ip;
+	struct ip6_hdr *ip6;
+
+	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
+	if (ip->ip_v == IPVERSION)
+		return ip->ip_p;
+
+	if (ip->ip_v == 6) {
+		ip6 = (struct ip6_hdr *)ip;
+		/* XXX: TODO: add support IPv6 extension header */
+		return ip6->ip6_nxt;
+	}
 
 	return 0;
 }
@@ -66,21 +88,17 @@ l2pkt_getl3hdrlength(struct l2pkt *l2pkt)
 int
 l2pkt_getl4hdrlength(struct l2pkt *l2pkt)
 {
-	struct ip *ip;
+	uint8_t proto = l2pkt_getl4protocol(l2pkt);
 
-	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-	if (ip->ip_v != IPVERSION) {
-		return 0;	// XXX: IPv6 not yet
-	}
-
-	switch (ip->ip_p) {
+	switch (proto) {
+	case IPPROTO_ICMPV6:	/* XXX */
 	case IPPROTO_ICMP:
 		return 8;	/* XXX */
 	case IPPROTO_UDP:
 		return sizeof(struct udphdr);
 	case IPPROTO_TCP:
 		{
-			struct tcphdr *tcp = (struct tcphdr *)((char *)ip + ip->ip_hl * 4);
+			struct tcphdr *tcp = (struct tcphdr *)(L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt));
 			return (tcp->th_off * 4);
 		}
 	default:
@@ -97,6 +115,7 @@ l2pkt_getl4length(struct l2pkt *l2pkt)
 
 	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
 	if (ip->ip_v != IPVERSION) {
+		fprintf(stderr, "%s:%d: not support IPv%d\n", __func__, __LINE__, ip->ip_v);
 		return 0;	// XXX: IPv6 not yet
 	}
 
@@ -119,18 +138,14 @@ l2pkt_getl4length(struct l2pkt *l2pkt)
 int
 l2pkt_getl4csumoffset(struct l2pkt *l2pkt)
 {
-	struct ip *ip;
+	uint8_t proto = l2pkt_getl4protocol(l2pkt);
 
-	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-	if (ip->ip_v != IPVERSION) {
-		return 0;	// XXX: IPv6 not yet
-	}
-
-	switch (ip->ip_p) {
+	switch (proto) {
 	case IPPROTO_UDP:
 		return offsetof(struct udphdr, uh_sum);
 	case IPPROTO_TCP:
 		return offsetof(struct tcphdr, th_sum);
+	case IPPROTO_ICMPV6:	/* XXX */
 	case IPPROTO_ICMP:
 		return offsetof(struct icmp, icmp_cksum);
 	default:
@@ -143,18 +158,28 @@ int
 l2pkt_extract(struct l2pkt *l2pkt)
 {
 	struct ip *ip;
+	struct ip6_hdr *ip6;
 
 	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-	if (ip->ip_v != IPVERSION) {
-		return -1;	// XXX: IPv6 not yet
+	if (ip->ip_v == IPVERSION) {
+		l2pkt->info.family = 4;
+		l2pkt->info.proto = ip->ip_p;
+		memcpy(&l2pkt->info.src4, &ip->ip_src, sizeof(struct in_addr));
+		memcpy(&l2pkt->info.dst4, &ip->ip_dst, sizeof(struct in_addr));
+
+	} else if (ip->ip_v == 6) {
+		ip6 = (struct ip6_hdr *)ip;
+		l2pkt->info.family = 6;
+
+		/* XXX: TODO: add support IPv6 extension header */
+		l2pkt->info.proto = ip6->ip6_nxt;
+
+		memcpy(&l2pkt->info.src6, &ip6->ip6_src, sizeof(struct in6_addr));
+		memcpy(&l2pkt->info.dst6, &ip6->ip6_dst, sizeof(struct in6_addr));
 	}
 
-	l2pkt->info.family = 4;
-	l2pkt->info.proto = ip->ip_p;
-	memcpy(&l2pkt->info.src4, &ip->ip_src, sizeof(struct in_addr));
-	memcpy(&l2pkt->info.dst4, &ip->ip_dst, sizeof(struct in_addr));
 
-	switch (ip->ip_p) {
+	switch (l2pkt->info.proto) {
 	case IPPROTO_UDP:
 		l2pkt_l4read(l2pkt, offsetof(struct udphdr, uh_sport), (char *)&l2pkt->info.sport, sizeof(uint16_t));
 		l2pkt_l4read(l2pkt, offsetof(struct udphdr, uh_dport), (char *)&l2pkt->info.dport, sizeof(uint16_t));
@@ -173,15 +198,9 @@ l2pkt_extract(struct l2pkt *l2pkt)
 int
 l2pkt_l4write(struct l2pkt *l2pkt, unsigned int offset, char *data, unsigned int datalen)
 {
-	struct ip *ip;
 	uint16_t *sump;
 	char *datap;
 	uint32_t sum;
-
-	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-	if (ip->ip_v != IPVERSION) {
-		return 0;	// XXX: IPv6 not yet
-	}
 
 	sump = (uint16_t *)(L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt) + l2pkt_getl4csumoffset(l2pkt));
 	datap = L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt) + offset;
@@ -233,32 +252,24 @@ l2pkt_l4write(struct l2pkt *l2pkt, unsigned int offset, char *data, unsigned int
 int
 l2pkt_l4write_raw(struct l2pkt *l2pkt, unsigned int offset, char *data, unsigned int datalen)
 {
-	struct ip *ip;
 	char *datap;
-
-	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-	if (ip->ip_v != IPVERSION) {
-		return 0;	// XXX: IPv6 not yet
-	}
 
 	datap = L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt) + offset;
 
-	{
-		if (offset & 1) {
-			*datap++ = *data++;
-			datalen--;
-		}
+	if (offset & 1) {
+		*datap++ = *data++;
+		datalen--;
+	}
 
-		for (; datalen >= 2; datalen -= 2) {
-			*(uint16_t *)datap = *(uint16_t *)data;
-			datap += 2;
-			data += 2;
-		}
+	for (; datalen >= 2; datalen -= 2) {
+		*(uint16_t *)datap = *(uint16_t *)data;
+		datap += 2;
+		data += 2;
+	}
 
-		if (datalen > 0) {
-			*datap++ = *data++;
-			datalen--;
-		}
+	if (datalen > 0) {
+		*datap++ = *data++;
+		datalen--;
 	}
 
 	return 0;
@@ -267,32 +278,24 @@ l2pkt_l4write_raw(struct l2pkt *l2pkt, unsigned int offset, char *data, unsigned
 int
 l2pkt_l4read(struct l2pkt *l2pkt, unsigned int offset, char *data, unsigned int datalen)
 {
-	struct ip *ip;
 	char *datap;
-
-	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-	if (ip->ip_v != IPVERSION) {
-		return 0;	// XXX: IPv6 not yet
-	}
 
 	datap = L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt) + offset;
 
-	{
-		if (offset & 1) {
-			*data++ = *datap++;
-			datalen--;
-		}
+	if (offset & 1) {
+		*data++ = *datap++;
+		datalen--;
+	}
 
-		for (; datalen >= 2; datalen -= 2) {
-			*(uint16_t *)data = *(uint16_t *)datap;
-			datap += 2;
-			data += 2;
-		}
+	for (; datalen >= 2; datalen -= 2) {
+		*(uint16_t *)data = *(uint16_t *)datap;
+		datap += 2;
+		data += 2;
+	}
 
-		if (datalen > 0) {
-			*data++ = *datap++;
-			datalen--;
-		}
+	if (datalen > 0) {
+		*data++ = *datap++;
+		datalen--;
 	}
 
 	return 0;
@@ -372,14 +375,9 @@ l2pkt_icmpseq(struct l2pkt *l2pkt, uint16_t seq)
 int
 l2pkt_srcport(struct l2pkt *l2pkt, uint16_t port)
 {
-	struct ip *ip;
+	uint8_t proto = l2pkt_getl4protocol(l2pkt);
 
-	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-	if (ip->ip_v != IPVERSION) {
-		return 0;	// XXX: IPv6 not yet
-	}
-
-	switch (ip->ip_p) {
+	switch (proto) {
 	case IPPROTO_UDP:
 		l2pkt_l4write_2(l2pkt, offsetof(struct udphdr, uh_sport), port);
 		break;
@@ -396,14 +394,9 @@ l2pkt_srcport(struct l2pkt *l2pkt, uint16_t port)
 int
 l2pkt_dstport(struct l2pkt *l2pkt, uint16_t port)
 {
-	struct ip *ip;
+	uint8_t proto = l2pkt_getl4protocol(l2pkt);
 
-	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-	if (ip->ip_v != IPVERSION) {
-		return 0;	// XXX: IPv6 not yet
-	}
-
-	switch (ip->ip_p) {
+	switch (proto) {
 	case IPPROTO_UDP:
 		l2pkt_l4write_2(l2pkt, offsetof(struct udphdr, uh_dport), port);
 		break;

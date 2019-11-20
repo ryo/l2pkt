@@ -148,7 +148,7 @@ l2pkt_ip4_icmp_template(struct l2pkt *l2pkt, uint16_t icmplen)
 	l2pkt_ip4_proto_template(l2pkt, IPPROTO_ICMP, icmplen);
 
 	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-	icmp = (struct icmp *)(ip + 1);
+	icmp = (struct icmp *)((char *)ip + l2pkt_getl3hdrlength(l2pkt));
 	icmp->icmp_type = ICMP_ECHO;
 	icmp->icmp_cksum = 0;
 	icmp->icmp_cksum = in_cksum(0, (char *)icmp, icmplen);
@@ -165,7 +165,7 @@ l2pkt_ip4_udp_template(struct l2pkt *l2pkt, uint16_t udplen)
 	l2pkt_ip4_proto_template(l2pkt, IPPROTO_UDP, udplen);
 
 	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-	udp = (struct udphdr *)(ip + 1);
+	udp = (struct udphdr *)((char *)ip + l2pkt_getl3hdrlength(l2pkt));
 	udp->uh_ulen = htons(udplen);
 	udp->uh_sum = 0;
 	udp->uh_sum = in4_cksum(ip->ip_src, ip->ip_dst, ip->ip_p, (char *)udp, udplen);
@@ -182,7 +182,7 @@ l2pkt_ip4_tcp_template(struct l2pkt *l2pkt, uint16_t tcplen)
 	l2pkt_ip4_proto_template(l2pkt, IPPROTO_TCP, tcplen);
 
 	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-	tcp = (struct tcphdr *)(ip + 1);
+	tcp = (struct tcphdr *)((char *)ip + l2pkt_getl3hdrlength(l2pkt));
 	tcp->th_off = sizeof(struct tcphdr) / 4;
 	tcp->th_sum = 0;
 	tcp->th_sum = in4_cksum(ip->ip_src, ip->ip_dst, ip->ip_p, (char *)tcp, tcplen);

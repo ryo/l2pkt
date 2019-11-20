@@ -141,20 +141,25 @@ int l2pkt_ip4_id(struct l2pkt *, uint16_t);
 int l2pkt_ip4_ttl(struct l2pkt *, uint8_t);
 int l2pkt_ip4_src(struct l2pkt *, in_addr_t);
 int l2pkt_ip4_dst(struct l2pkt *, in_addr_t);
-
 int l2pkt_ip4_proto_template(struct l2pkt *, uint8_t, uint16_t);
 int l2pkt_ip4_icmp_template(struct l2pkt *, uint16_t);
 int l2pkt_ip4_udp_template(struct l2pkt *, uint16_t);
 int l2pkt_ip4_tcp_template(struct l2pkt *, uint16_t);
 
-int l2pkt_ip4_srcport(struct l2pkt *, uint16_t);
-int l2pkt_ip4_dstport(struct l2pkt *, uint16_t);
+/* ip6pkt.c */
+int l2pkt_ip6_src(struct l2pkt *, struct in6_addr *);
+int l2pkt_ip6_dst(struct l2pkt *, struct in6_addr *);
+int l2pkt_ip6_proto_template(struct l2pkt *, uint8_t, uint16_t);
+int l2pkt_ip6_icmp6_template(struct l2pkt *, uint16_t);
+int l2pkt_ip6_udp_template(struct l2pkt *, uint16_t);
+int l2pkt_ip6_tcp_template(struct l2pkt *, uint16_t);
 
+/* l4pkt.c */
 int l2pkt_extract(struct l2pkt *);	/* extract to l2pkt->info */
-
 int l2pkt_getl3length(struct l2pkt *);
 int l2pkt_getl3hdrlength(struct l2pkt *);
 int l2pkt_getl4length(struct l2pkt *);
+int l2pkt_getl4protocol(struct l2pkt *);
 int l2pkt_getl4hdrlength(struct l2pkt *);
 int l2pkt_getl4csumoffset(struct l2pkt *);
 int l2pkt_l4write(struct l2pkt *, unsigned int, char *, unsigned int);
@@ -167,58 +172,19 @@ uint8_t l2pkt_l4read_1(struct l2pkt *, unsigned int);
 uint16_t l2pkt_l4read_2(struct l2pkt *, unsigned int);
 uint32_t l2pkt_l4read_4(struct l2pkt *, unsigned int);
 
+int l2pkt_srcport(struct l2pkt *, uint16_t);
+int l2pkt_dstport(struct l2pkt *, uint16_t);
+
 int l2pkt_icmptype(struct l2pkt *, uint8_t);
 int l2pkt_icmpcode(struct l2pkt *, uint8_t);
 int l2pkt_icmpid(struct l2pkt *, uint16_t);
 int l2pkt_icmpseq(struct l2pkt *, uint16_t);
-
-int l2pkt_srcport(struct l2pkt *, uint16_t);
-int l2pkt_dstport(struct l2pkt *, uint16_t);
 
 int l2pkt_tcpseq(struct l2pkt *, uint32_t);
 int l2pkt_tcpack(struct l2pkt *, uint32_t);
 int l2pkt_tcpflags(struct l2pkt *, uint8_t);
 int l2pkt_tcpwin(struct l2pkt *, uint16_t);
 int l2pkt_tcpurp(struct l2pkt *, uint16_t);
-
-//int l2pkt_ip4_test_cksum(struct l2pkt *, unsigned int);
-
-///* ip6pkt.c */
-//int l2pkt_ip6pkt_neighbor_parse(struct l2pkt *, int *, struct ether_addr *, struct in6_addr *);
-//int l2pkt_ip6pkt_neighbor_solicit(struct l2pkt *, const struct ether_addr *, struct in6_addr *, struct in6_addr *);
-//int l2pkt_ip6pkt_neighbor_solicit_reply(struct l2pkt *, const char *, u_char *, struct in6_addr *);
-//int l2pkt_ip6pkt_icmp6_template(struct l2pkt *, unsigned int);
-//int l2pkt_ip6pkt_icmp6_echoreply(struct l2pkt *, const char *, unsigned int);
-//int l2pkt_ip6pkt_icmp6_type(struct l2pkt *, unsigned int);
-//int l2pkt_ip6pkt_udp_template(struct l2pkt *, unsigned int);
-//int l2pkt_ip6pkt_tcp_template(struct l2pkt *, unsigned int);
-//int l2pkt_ip6pkt_length(struct l2pkt *, unsigned int);
-//int l2pkt_ip6pkt_off(struct l2pkt *, uint16_t);
-//int l2pkt_ip6pkt_flowinfo(struct l2pkt *, uint32_t);
-//int l2pkt_ip6pkt_ttl(struct l2pkt *, int);
-//int l2pkt_ip6pkt_src(struct l2pkt *, const struct in6_addr *);
-//int l2pkt_ip6pkt_dst(struct l2pkt *, const struct in6_addr *);
-//int l2pkt_ip6pkt_srcport(struct l2pkt *, uint16_t);
-//int l2pkt_ip6pkt_dstport(struct l2pkt *, uint16_t);
-//int l2pkt_ip6pkt_payload(struct l2pkt *, char *, unsigned int);
-//
-//int l2pkt_ip6pkt_icmptype(struct l2pkt *, uint8_t);
-//int l2pkt_ip6pkt_icmpcode(struct l2pkt *, uint8_t);
-//int l2pkt_ip6pkt_icmpid(struct l2pkt *, uint16_t);
-//int l2pkt_ip6pkt_icmpseq(struct l2pkt *, uint16_t);
-//
-//int l2pkt_ip6pkt_tcpseq(struct l2pkt *, uint32_t);
-//int l2pkt_ip6pkt_tcpack(struct l2pkt *, uint32_t);
-//int l2pkt_ip6pkt_tcpflags(struct l2pkt *, int);
-//int l2pkt_ip6pkt_tcpwin(struct l2pkt *, uint16_t);
-//int l2pkt_ip6pkt_tcpurp(struct l2pkt *, uint16_t);
-//
-//int l2pkt_ip6pkt_writedata(struct l2pkt *, unsigned int, char *, unsigned int);
-//int l2pkt_ip6pkt_readdata(struct l2pkt *, unsigned int, char *, unsigned int);
-//char *l2pkt_ip6pkt_getptr(struct l2pkt *, unsigned int);
-//
-//int l2pkt_ip6pkt_test_cksum(struct l2pkt *, unsigned int);
-
 
 /* utils */
 int fdumpstr(FILE *, const char *, size_t);

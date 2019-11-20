@@ -61,7 +61,7 @@ usage()
 	fprintf(stderr, "	-X			dump generated packet\n");
 //	fprintf(stderr, "	-a			build arp query packet\n");
 	fprintf(stderr, "	-4			build IPv4 packet\n");
-//	fprintf(stderr, "	-6			build IPv6 packet\n");
+	fprintf(stderr, "	-6			build IPv6 packet\n");
 	fprintf(stderr, "	--src <addr>		source address\n");
 	fprintf(stderr, "	--dst <addr>		destination address\n");
 	fprintf(stderr, "	--proto <proto>		protocol\n");
@@ -101,7 +101,7 @@ static char *
 strinaddr(struct in_addr *in)
 {
 	static int idx = 0;
-	static char buf[8][sizeof("255.255.255.255")];
+	static char buf[8][INET_ADDRSTRLEN];
 	char *p;
 
 	idx = (idx + 1) % 8;
@@ -111,23 +111,18 @@ strinaddr(struct in_addr *in)
 	return p;
 }
 
-
-static int
-parseint(const char *str, int *v, int min, int max)
+static char *
+strin6addr(struct in6_addr *in6)
 {
-	long long int x;
-	char *ep = NULL;
+	static int idx = 0;
+	static char buf[8][INET6_ADDRSTRLEN];
+	char *p;
 
-	x = strtoll(str, &ep, 10);
-	if (ep == str)
-		return -1;
-	if (x < min)
-		return -2;
-	if (x > max)
-		return -3;
+	idx = (idx + 1) % 8;
+	p = buf[idx];
 
-	*v = x;
-	return 0;
+	inet_ntop(AF_INET6, in6, p, sizeof(buf[0]));
+	return p;
 }
 
 static int
@@ -185,13 +180,16 @@ main(int argc, char *argv[])
 	uint32_t opt_rsshash4idx = 0, opt_rsshash4mod = 0;
 	bool opt_ip4src = false;
 	bool opt_ip4dst = false;
+	struct in_addr ip4src, ip4dst;
+	bool opt_ip6src = false;
+	bool opt_ip6dst = false;
+	struct in6_addr ip6src, ip6dst;
 	bool opt_srcport = false;
 	bool opt_dstport = false;
 	bool opt_X = false;
 	int opt_fragoff = 0;
 	int opt_ip4csum = -1;
 	int opt_l4csum = -1;
-	struct in_addr ip4src, ip4dst;
 	int srcport, dstport;
 	int i;
 	int opt_family = 0;
@@ -228,12 +226,18 @@ main(int argc, char *argv[])
 					}
 					endprotoent();
 				} else if (strcmp("--src", optname) == 0) {
-					opt_ip4src = true;
-					if (inet_aton(optarg, &ip4src) == 0)
+					if (inet_pton(AF_INET6, optarg, &ip6src) == 1)
+						opt_ip6src = true;
+					else if (inet_pton(AF_INET, optarg, &ip4src) == 1)
+						opt_ip4src = true;
+					else
 						errx(1, "invalid address: %s", optarg);
 				} else if (strcmp("--dst", optname) == 0) {
-					opt_ip4dst = true;
-					if (inet_aton(optarg, &ip4dst) == 0)
+					if (inet_pton(AF_INET6, optarg, &ip6dst) == 1)
+						opt_ip6dst = true;
+					else if (inet_pton(AF_INET, optarg, &ip4dst) == 1)
+						opt_ip4dst = true;
+					else
 						errx(1, "invalid address: %s", optarg);
 				} else if (strcmp("--ttl", optname) == 0) {
 					if (parsenum(optarg, &opt_ttl, 0, 0xff) != 0)
@@ -316,14 +320,14 @@ main(int argc, char *argv[])
 			opt_X = true;
 			break;
 		case 'f':
-			if (parseint(optarg, &framesize, 0, MAXFRAMESIZE) != 0)
+			if (parsenum(optarg, &framesize, 0, MAXFRAMESIZE) != 0)
 				errx(1, "illegal framesize: %s", optarg);
 			break;
 		case 'i':
 			ifname = optarg;
 			break;
 		case 'n':
-			if (parseint(optarg, &npacket, 0, INT_MAX) != 0)
+			if (parsenum(optarg, &npacket, 0, INT_MAX) != 0)
 				errx(1, "illegal number: %s", optarg);
 			break;
 		case 'R':
@@ -334,7 +338,7 @@ main(int argc, char *argv[])
 			opt_random = 1;
 			break;
 		case 's':
-			if (parseint(optarg, &packetsize, 0, MAXPACKETSIZE) != 0)
+			if (parsenum(optarg, &packetsize, 0, MAXPACKETSIZE) != 0)
 				errx(1, "illegal packetsize: %s", optarg);
 			break;
 		case 't':
@@ -441,23 +445,17 @@ main(int argc, char *argv[])
 				else
 					opt_protocol = IPPROTO_IP;
 			}
-
 			l2pkt_ip4_proto_template(l2pkt, opt_protocol, packetsize - sizeof(struct ip));
 			break;
 		}
 
-//XXX:DEBUG
-//		l2pkt_ip4_off(l2pkt, 1234);
-//		l2pkt_ip4_id(l2pkt, 0x8765);
-
+#if 0
+		// XXX:DEBUG
+		l2pkt_ip4_off(l2pkt, 1234);
+		l2pkt_ip4_id(l2pkt, 0x8765);
+#endif
 		if (opt_ttl > 0)
 			l2pkt_ip4_ttl(l2pkt, opt_ttl);
-
-//XXX:DEBUG
-//		if (opt_protocol == IPPROTO_TCP) {
-//			l2pkt_tcpseq(l2pkt, 0x12345678);
-//			l2pkt_tcpack(l2pkt, 0xabcdef01);
-//		}
 
 		if (opt_ip4src)
 			l2pkt_ip4_src(l2pkt, ip4src.s_addr);
@@ -472,6 +470,48 @@ main(int argc, char *argv[])
 			l2pkt_ip4_off(l2pkt, opt_fragoff);
 		}
 
+	} else if (opt_family == 6) {
+		switch (opt_protocol) {
+		case IPPROTO_UDP:
+			l2pkt_ip6_udp_template(l2pkt, packetsize - sizeof(struct ip6_hdr));
+			break;
+		case IPPROTO_TCP:
+			l2pkt_ip6_tcp_template(l2pkt, packetsize - sizeof(struct ip6_hdr));
+			break;
+		case IPPROTO_ICMPV6:
+			l2pkt_ip6_icmp6_template(l2pkt, packetsize - sizeof(struct ip6_hdr));
+			break;
+		default:
+			if (opt_protocol == -1) {
+				if (opt_random)
+					opt_protocol = rand();
+				else
+					opt_protocol = IPPROTO_IP;
+			}
+			l2pkt_ip6_proto_template(l2pkt, opt_protocol, packetsize - sizeof(struct ip6_hdr));
+			break;
+		}
+
+//		if (opt_ttl > 0)
+//			l2pkt_ip6_ttl(l2pkt, opt_ttl);
+
+		if (opt_ip6src)
+			l2pkt_ip6_src(l2pkt, &ip6src);
+		if (opt_ip6dst)
+			l2pkt_ip6_dst(l2pkt, &ip6dst);
+
+//		if (opt_fragoff != 0) {
+//			l2pkt_ip6_off(l2pkt, opt_fragoff);
+//		}
+	}
+
+	if (opt_srcport)
+		l2pkt_srcport(l2pkt, srcport);
+	if (opt_dstport)
+		l2pkt_dstport(l2pkt, dstport);
+
+
+	if (opt_family == 4) {
 		if (opt_rsshash2mod != 0) {
 			struct in_addr src, dst;
 			uint32_t hash, i;
@@ -588,23 +628,22 @@ main(int argc, char *argv[])
 				ip->ip_sum = tmp;
 			}
 		}
-	} else if (opt_family == 6) {
-		errx(1, "-6 is not supported yet");
 	}
 
 	if (opt_v) {
+		struct protoent *pe;
+
 		l2pkt_extract(l2pkt);
 
-		if (l2pkt->info.family == 4) {
-			struct protoent *pe;
-			uint16_t sport, dport;
+		pe = getprotobynumber(l2pkt->info.proto);
+		if (pe != NULL)
+			printf("Protocol %s(%d), ", pe->p_name, l2pkt->info.proto);
+		else
+			printf("Protocol %d, ", l2pkt->info.proto);
+		endprotoent();
 
-			pe = getprotobynumber(l2pkt->info.proto);
-			if (pe != NULL)
-				printf("Protocol %s(%d), ", pe->p_name, l2pkt->info.proto);
-			else
-				printf("Protocol %d, ", l2pkt->info.proto);
-			endprotoent();
+		if (l2pkt->info.family == 4) {
+			uint16_t sport, dport;
 
 			if (PROTO_HAS_PORT(l2pkt->info.proto)) {
 				printf("%s:%d -> %s:%d\n",
@@ -632,8 +671,17 @@ main(int argc, char *argv[])
 				printf("RssHash(4-tuple): 0x%08x\n", hash_p);
 			}
 
-		} else {
-			// XXX: not yet IPv6
+		} else if (opt_family == 6) {
+			if (PROTO_HAS_PORT(l2pkt->info.proto)) {
+				printf("[%s]:%d -> [%s]:%d\n",
+				    strin6addr(&l2pkt->info.src6), ntohs(l2pkt->info.sport),
+				    strin6addr(&l2pkt->info.dst6), ntohs(l2pkt->info.dport));
+			} else {
+				printf("%s -> %s\n",
+				    strin6addr(&l2pkt->info.src6),
+				    strin6addr(&l2pkt->info.dst6));
+			}
+
 		}
 
 		printf("\n");
