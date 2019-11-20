@@ -172,6 +172,9 @@ int l2pkt_icmpcode(struct l2pkt *, uint8_t);
 int l2pkt_icmpid(struct l2pkt *, uint16_t);
 int l2pkt_icmpseq(struct l2pkt *, uint16_t);
 
+int l2pkt_srcport(struct l2pkt *, uint16_t);
+int l2pkt_dstport(struct l2pkt *, uint16_t);
+
 int l2pkt_tcpseq(struct l2pkt *, uint32_t);
 int l2pkt_tcpack(struct l2pkt *, uint32_t);
 int l2pkt_tcpflags(struct l2pkt *, uint8_t);

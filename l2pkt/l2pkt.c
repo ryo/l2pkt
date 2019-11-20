@@ -39,6 +39,7 @@ struct option long_options[] = {
 	{ "src",		required_argument,	NULL, 0 },
 	{ "dst",		required_argument,	NULL, 0 },
 	{ "proto",		required_argument,	NULL, 0 },
+	{ "ttl",		required_argument,	NULL, 0 },
 	{ "fragoff",		required_argument,	NULL, 0 },
 	{ "srcport",		required_argument,	NULL, 0 },
 	{ "dstport",		required_argument,	NULL, 0 },
@@ -179,6 +180,7 @@ main(int argc, char *argv[])
 	int opt_randseed = getpid();
 	int opt_random = 0;
 	int opt_protocol = -1;
+	int opt_ttl = 0;
 	uint32_t opt_rsshash2idx = 0, opt_rsshash2mod = 0;
 	uint32_t opt_rsshash4idx = 0, opt_rsshash4mod = 0;
 	bool opt_ip4src = false;
@@ -233,13 +235,16 @@ main(int argc, char *argv[])
 					opt_ip4dst = true;
 					if (inet_aton(optarg, &ip4dst) == 0)
 						errx(1, "invalid address: %s", optarg);
+				} else if (strcmp("--ttl", optname) == 0) {
+					if (parsenum(optarg, &opt_ttl, 0, 0xff) != 0)
+						errx(1, "invalid ttl: %s", optarg);
 				} else if (strcmp("--srcport", optname) == 0) {
 					opt_srcport = true;
-					if (parseint(optarg, &srcport, 0, 65535) != 0)
+					if (parsenum(optarg, &srcport, 0, 65535) != 0)
 						errx(1, "invalid srcport: %s", optarg);
 				} else if (strcmp("--dstport", optname) == 0) {
 					opt_dstport = true;
-					if (parseint(optarg, &dstport, 0, 65535) != 0)
+					if (parsenum(optarg, &dstport, 0, 65535) != 0)
 						errx(1, "invalid dstport: %s", optarg);
 				} else if (strcmp("--fragoff", optname) == 0) {
 					if (parsenum(optarg, &opt_fragoff, 0, 0xffff) != 0)
@@ -444,7 +449,9 @@ main(int argc, char *argv[])
 //XXX:DEBUG
 //		l2pkt_ip4_off(l2pkt, 1234);
 //		l2pkt_ip4_id(l2pkt, 0x8765);
-//		l2pkt_ip4_ttl(l2pkt, 123);
+
+		if (opt_ttl > 0)
+			l2pkt_ip4_ttl(l2pkt, opt_ttl);
 
 //XXX:DEBUG
 //		if (opt_protocol == IPPROTO_TCP) {
@@ -457,9 +464,9 @@ main(int argc, char *argv[])
 		if (opt_ip4dst)
 			l2pkt_ip4_dst(l2pkt, ip4dst.s_addr);
 		if (opt_srcport)
-			l2pkt_ip4_srcport(l2pkt, srcport);
+			l2pkt_srcport(l2pkt, srcport);
 		if (opt_dstport)
-			l2pkt_ip4_dstport(l2pkt, dstport);
+			l2pkt_dstport(l2pkt, dstport);
 
 		if (opt_fragoff != 0) {
 			l2pkt_ip4_off(l2pkt, opt_fragoff);
@@ -540,8 +547,8 @@ main(int argc, char *argv[])
 			fprintf(stderr, "\n");
 			err(5, "tupple4: %08x/%08x hash not found\n", opt_rsshash4mod, opt_rsshash4idx);
  found:
-			l2pkt_ip4_srcport(l2pkt, ntohs(sport));
-			l2pkt_ip4_dstport(l2pkt, ntohs(dport));
+			l2pkt_srcport(l2pkt, ntohs(sport));
+			l2pkt_dstport(l2pkt, ntohs(dport));
 		}
 
 		if (opt_l4csum >= 0) {
@@ -637,7 +644,7 @@ main(int argc, char *argv[])
 	for (nsend = 0; nsend < npacket; nsend++) {
 		if (opt_X) {
 			printf("L2 framesize = %d, L3 packetsize = %d\n", framesize, packetsize);
-			packetdump(L2PKT_L2BUF(l2pkt), framesize + 32);
+			packetdump(L2PKT_L2BUF(l2pkt), framesize);
 		}
 
 		r = write(bpf_fd, L2PKT_L2BUF(l2pkt), L2PKT_L2SIZE(l2pkt));

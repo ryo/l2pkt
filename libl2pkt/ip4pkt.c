@@ -235,8 +235,7 @@ l2pkt_ip4_length(struct l2pkt *l2pkt, uint16_t iplen)
 		}
 		break;
 	case IPPROTO_ICMP:
-		fprintf(stderr, "%s:%d: protocol ICMP is not supported\n", __func__, __LINE__);
-		return -1;
+		/* icmp checksum does not depend on packet length */
 		break;
 
 	default:
@@ -369,64 +368,4 @@ int
 l2pkt_ip4_dst(struct l2pkt *l2pkt, in_addr_t addr)
 {
 	return l2pkt_ip4_srcdst(l2pkt, 1, addr);
-}
-
-static inline int
-l2pkt_ip4_srcdstport(struct l2pkt *l2pkt, int srcdst, uint16_t port)
-{
-	struct ip *ip;
-	uint32_t sum;
-	uint16_t oldport;
-
-	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-	if (ip->ip_v != IPVERSION)
-		return -1;
-
-	port = htons(port);
-	if (ip->ip_p == IPPROTO_UDP) {
-		struct udphdr *udp = (struct udphdr *)((char *)ip + ip->ip_hl * 4);
-
-		if (srcdst == 0) {
-			/* change src */
-			oldport = udp->uh_sport;
-			udp->uh_sport = port;
-		} else {
-			/* change dst */
-			oldport = udp->uh_dport;
-			udp->uh_dport = port;
-		}
-		sum = ~udp->uh_sum & 0xffff;
-		sum -= oldport;
-		sum += port;
-		udp->uh_sum = ~reduce1(sum);
-	} else if (ip->ip_p == IPPROTO_TCP) {
-		struct tcphdr *tcp = (struct tcphdr *)((char *)ip + ip->ip_hl * 4);
-
-		if (srcdst == 0) {
-			/* change src */
-			oldport = tcp->th_sport;
-			tcp->th_sport = port;
-		} else {
-			/* change dst */
-			oldport =  tcp->th_dport;
-			tcp->th_dport = port;
-		}
-		sum = ~tcp->th_sum & 0xffff;
-		sum -= oldport;
-		sum += port;
-		tcp->th_sum = ~reduce1(sum);
-	}
-	return 0;
-}
-
-int
-l2pkt_ip4_srcport(struct l2pkt *l2pkt, uint16_t port)
-{
-	return l2pkt_ip4_srcdstport(l2pkt, 0, port);
-}
-
-int
-l2pkt_ip4_dstport(struct l2pkt *l2pkt, uint16_t port)
-{
-	return l2pkt_ip4_srcdstport(l2pkt, 1, port);
 }

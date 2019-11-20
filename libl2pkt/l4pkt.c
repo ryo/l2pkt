@@ -111,6 +111,7 @@ l2pkt_getl4length(struct l2pkt *l2pkt)
 		break;
 	}
 
+	/* L4 length is L3 length - L3 header */
 	return (ntohs(ip->ip_len) - (ip->ip_hl * 4));
 }
 
@@ -366,6 +367,54 @@ int
 l2pkt_icmpseq(struct l2pkt *l2pkt, uint16_t seq)
 {
 	return l2pkt_l4write_2(l2pkt, offsetof(struct icmp, icmp_id), seq);
+}
+
+int
+l2pkt_srcport(struct l2pkt *l2pkt, uint16_t port)
+{
+	struct ip *ip;
+
+	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
+	if (ip->ip_v != IPVERSION) {
+		return 0;	// XXX: IPv6 not yet
+	}
+
+	switch (ip->ip_p) {
+	case IPPROTO_UDP:
+		l2pkt_l4write_2(l2pkt, offsetof(struct udphdr, uh_sport), port);
+		break;
+	case IPPROTO_TCP:
+		l2pkt_l4write_2(l2pkt, offsetof(struct tcphdr, th_sport), port);
+		break;
+	default:
+		return -1;
+	}
+
+	return 0;
+}
+
+int
+l2pkt_dstport(struct l2pkt *l2pkt, uint16_t port)
+{
+	struct ip *ip;
+
+	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
+	if (ip->ip_v != IPVERSION) {
+		return 0;	// XXX: IPv6 not yet
+	}
+
+	switch (ip->ip_p) {
+	case IPPROTO_UDP:
+		l2pkt_l4write_2(l2pkt, offsetof(struct udphdr, uh_dport), port);
+		break;
+	case IPPROTO_TCP:
+		l2pkt_l4write_2(l2pkt, offsetof(struct tcphdr, th_dport), port);
+		break;
+	default:
+		return -1;
+	}
+
+	return 0;
 }
 
 int
