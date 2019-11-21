@@ -69,13 +69,13 @@ usage()
 	fprintf(stderr, "	--srcport <port>	source port\n");
 	fprintf(stderr, "	--dstport <port>	destination port\n");
 	fprintf(stderr, "	--ip4csum <sum>		specify IPv4 checksum\n"
-			"				(adjusting with modifying ip_id)\n");
+			"				(adjusting by modifying ip_id)\n");
 	fprintf(stderr, "	--bad-ip4csum		don't adjust IPv4 checksum\n");
 	fprintf(stderr, "	--l4csum <sum>		specify L4 checksum (TCP,UDP,ICMP)\n"
-			"				(adjusting with modifying last 2 bytes of payload)\n");
+			"				(adjusting by modifying last 2 bytes of payload)\n");
 	fprintf(stderr, "	--bad-l4csum		don't adjust L4 checksum\n");
-	fprintf(stderr, "	--rsshash2 <idx>/<mod>	specify 2-tuple rsshash with modifying source addr\n");
-	fprintf(stderr, "	--rsshash4 <idx>/<mod>	specify 4-tuple rsshash with modifying source port/addr\n");
+	fprintf(stderr, "	--rsshash2 <idx>/<mod>	specify 2-tuple rsshash by modifying source addr\n");
+	fprintf(stderr, "	--rsshash4 <idx>/<mod>	specify 4-tuple rsshash by modifying source/dest port\n");
 	fprintf(stderr, "	-T			fill 16byte timestamp string in the end of packet\n");
 	fprintf(stderr, "	-i <interface>		output interface\n");
 	fprintf(stderr, "	-n <npacket>		output N packets (default: 1)\n");
@@ -98,7 +98,7 @@ inaddr(const char *s)
 }
 
 static char *
-strinaddr(struct in_addr *in)
+strin4addr(struct in_addr *in)
 {
 	static int idx = 0;
 	static char buf[8][INET_ADDRSTRLEN];
@@ -123,6 +123,20 @@ strin6addr(struct in6_addr *in6)
 
 	inet_ntop(AF_INET6, in6, p, sizeof(buf[0]));
 	return p;
+}
+
+static char *
+straddr(int af, const void * restrict addr)
+{
+	switch (af) {
+	case AF_INET:
+		return strin4addr((struct in_addr *)addr);
+	case AF_INET6:
+		return strin6addr((struct in6_addr *)addr);
+	default:
+		break;
+	}
+	return NULL;
 }
 
 static int
@@ -160,7 +174,6 @@ parsenum(const char *str, int *v, unsigned int min, unsigned int max)
 	*v = x;
 	return 0;
 }
-
 
 int
 main(int argc, char *argv[])
@@ -292,11 +305,11 @@ main(int argc, char *argv[])
 			break;
 
 		case '4':
-			opt_family = 4;
+			opt_family = AF_INET;
 			ethertype = ETHERTYPE_IP;
 			break;
 		case '6':
-			opt_family = 6;
+			opt_family = AF_INET6;
 			ethertype = ETHERTYPE_IPV6;
 			break;
 
@@ -427,7 +440,7 @@ main(int argc, char *argv[])
 	}
 
 	/* build packet (per packet parameter) */
-	if (opt_family == 4) {
+	if (opt_family == AF_INET) {
 		switch (opt_protocol) {
 		case IPPROTO_UDP:
 			l2pkt_ip4_udp_template(l2pkt, packetsize - sizeof(struct ip));
@@ -461,16 +474,12 @@ main(int argc, char *argv[])
 			l2pkt_ip4_src(l2pkt, ip4src.s_addr);
 		if (opt_ip4dst)
 			l2pkt_ip4_dst(l2pkt, ip4dst.s_addr);
-		if (opt_srcport)
-			l2pkt_srcport(l2pkt, srcport);
-		if (opt_dstport)
-			l2pkt_dstport(l2pkt, dstport);
 
 		if (opt_fragoff != 0) {
 			l2pkt_ip4_off(l2pkt, opt_fragoff);
 		}
 
-	} else if (opt_family == 6) {
+	} else if (opt_family == AF_INET6) {
 		switch (opt_protocol) {
 		case IPPROTO_UDP:
 			l2pkt_ip6_udp_template(l2pkt, packetsize - sizeof(struct ip6_hdr));
@@ -510,75 +519,86 @@ main(int argc, char *argv[])
 	if (opt_dstport)
 		l2pkt_dstport(l2pkt, dstport);
 
+	if (opt_rsshash2mod | opt_rsshash4mod) {
+		union {
+			struct in_addr addr4;
+			struct in6_addr addr6;
+		} src, dst;
+		size_t addrlen = sizeof(struct in_addr);
+		int af = opt_family;
+		uint32_t hash, i, j;
+		uint16_t sport, dport;
 
-	if (opt_family == 4) {
-		if (opt_rsshash2mod != 0) {
-			struct in_addr src, dst;
-			uint32_t hash, i;
+		if (opt_family == AF_INET6)
+			addrlen = sizeof(struct in6_addr);
+
+		if (opt_rsshash2mod) {
 
 			l2pkt_extract(l2pkt);
-			src = l2pkt->info.src4;
-			dst = l2pkt->info.dst4;
+			memcpy(&src, &l2pkt->info.src, addrlen);
+			memcpy(&dst, &l2pkt->info.dst, addrlen);
 
 			for (i = 0; ; i++) {
 				hash = toeplitz_hash(rsskey, sizeof(rsskey), 
-				    &src, sizeof(src),
-				    &dst, sizeof(dst),
+				    &src, addrlen,
+				    &dst, addrlen,
 				    NULL);
 				if ((hash % opt_rsshash2mod) == opt_rsshash2idx) {
 					if (opt_v) {
-						fprintf(stderr, "Found rsshash2(%s,%s): 0x%08x %% 0x%08x == 0x%08x   \n",
-						    strinaddr(&src), strinaddr(&dst),
-						    hash, opt_rsshash2mod, opt_rsshash2idx);
+						fprintf(stderr, "Found rsshash2(%s %s) = 0x%08x, (0x%08x %% 0x%08x) == 0x%08x   \n",
+						    straddr(af, &src), straddr(af, &dst),
+						    hash, hash, opt_rsshash2mod, opt_rsshash2idx);
 					}
 					break;
 				}
 				if (opt_v & ((i & 255) == 0)) {
-					fprintf(stderr, "checking rsshash2(%s,%s): 0x%08x %% 0x%08x == 0x%08x   \r",
-					    strinaddr(&src), strinaddr(&dst),
-					    hash, opt_rsshash2mod, opt_rsshash2idx);
+					fprintf(stderr, "checking rsshash2(%s %s) = 0x%08x, (0x%08x %% 0x%08x) == 0x%08x   \r",
+					    straddr(af, &src), straddr(af, &dst),
+					    hash, hash, opt_rsshash2mod, opt_rsshash2idx);
 				}
 
-				src.s_addr = htonl(ntohl(src.s_addr) + 1);
+				if (af == AF_INET)
+					src.addr4.s_addr = htonl(ntohl(src.addr4.s_addr) + 1);
+				else
+					src.addr6.s6_addr32[3] = htonl(ntohl(src.addr6.s6_addr32[3]) + 1);
 			}
-			l2pkt_ip4_src(l2pkt, src.s_addr);
+
+			if (af == AF_INET)
+				l2pkt_ip4_src(l2pkt, src.addr4.s_addr);
+			else
+				l2pkt_ip6_src(l2pkt, (struct in6_addr *)&src);
 		}
 
-		if (opt_rsshash4mod != 0) {
+		if (opt_rsshash4mod) {
 			if (!PROTO_HAS_PORT(opt_protocol))
 				errx(1, "--rsshash4 requires --proto tcp or --proto udp");
 
-			struct in_addr src, dst;
-			uint16_t sport, dport;
-			uint32_t hash, i, j;
-
 			l2pkt_extract(l2pkt);
-			src = l2pkt->info.src4;
-			dst = l2pkt->info.dst4;
+			memcpy(&src, &l2pkt->info.src, addrlen);
+			memcpy(&dst, &l2pkt->info.dst, addrlen);
 			sport = l2pkt->info.sport;
 			dport = l2pkt->info.dport;
-			
 
 			for (j = 0; j < 65536; j++) {
 				for (i = 0; i < 65536; i++) {
 					hash = toeplitz_hash(rsskey, sizeof(rsskey), 
-					    &src, sizeof(src),
-					    &dst, sizeof(dst),
+					    &src, addrlen,
+					    &dst, addrlen,
 					    &sport, sizeof(sport),
 					    &dport, sizeof(dport),
 					    NULL);
 					if ((hash % opt_rsshash4mod) == opt_rsshash4idx) {
 						if (opt_v) {
-							fprintf(stderr, "Found rsshash4(%s,%s,%d,%d): 0x%08x %% 0x%08x == 0x%08x     \n",
-							    strinaddr(&src), strinaddr(&dst), ntohs(sport), ntohs(dport),
-							    hash, opt_rsshash4mod, opt_rsshash4idx);
+							fprintf(stderr, "Found rsshash4(%s %s %d %d) = 0x%08x, (0x%08x %% 0x%08x) == 0x%08x     \n",
+							    straddr(af, &src), straddr(af, &dst), ntohs(sport), ntohs(dport),
+							    hash, hash, opt_rsshash4mod, opt_rsshash4idx);
 						}
 						goto found;
 					}
 					if (opt_v & ((i & 255) == 0)) {
-						fprintf(stderr, "checking rsshash4(%s,%s,%d,%d): 0x%08x %% 0x%08x != 0x%08x     \r",
-						    strinaddr(&src), strinaddr(&dst), ntohs(sport), ntohs(dport),
-						    hash, opt_rsshash4mod, opt_rsshash4idx);
+						fprintf(stderr, "checking rsshash4(%s %s %d %d) = 0x%08x, (0x%08x %% 0x%08x) != 0x%08x     \r",
+						    straddr(af, &src), straddr(af, &dst), ntohs(sport), ntohs(dport),
+						    hash, hash, opt_rsshash4mod, opt_rsshash4idx);
 					}
 					sport = htons(ntohs(sport) + 1);
 				}
@@ -590,48 +610,55 @@ main(int argc, char *argv[])
 			l2pkt_srcport(l2pkt, ntohs(sport));
 			l2pkt_dstport(l2pkt, ntohs(dport));
 		}
+	}
 
-		if (opt_l4csum >= 0) {
-			int l4hdrlen = l2pkt_getl4hdrlength(l2pkt);
-			int l4len = l2pkt_getl4length(l2pkt);
-			if ((l4len - l4hdrlen) < sizeof(uint16_t))
-				errx(5, "no space in L4 payload for adjusting checksum. increase packetsize");
+	if (opt_l4csum >= 0) {
+		int l4hdrlen = l2pkt_getl4hdrlength(l2pkt);
+		int l4len = l2pkt_getl4length(l2pkt);
+		if ((l4len - l4hdrlen) < sizeof(uint16_t))
+			errx(5, "no space in L4 payload for adjusting checksum. increase packetsize");
 
-			if (opt_bad_l4csum) {
-				uint16_t ucsum = htons(opt_l4csum);
-				int l4csumoff = l2pkt_getl4csumoffset(l2pkt);
-				l2pkt_l4write_raw(l2pkt, l4csumoff, (char *)&ucsum, 2);
-			} else {
-				/* write a checksum you want as payload data with adjusting checksum */
-				uint16_t ucsum = htons(opt_l4csum);
-				l2pkt_l4write(l2pkt, l4len - 2, (char *)&ucsum, 2);
+		if (opt_bad_l4csum) {
+			uint16_t ucsum = htons(opt_l4csum);
+			int l4csumoff = l2pkt_getl4csumoffset(l2pkt);
+			l2pkt_l4write_raw(l2pkt, l4csumoff, (char *)&ucsum, 2);
+		} else {
+			/* write a checksum you want as payload data with adjusting checksum */
+			uint16_t ucsum = htons(opt_l4csum);
 
-				uint16_t ocsum;
-				l2pkt_l4read(l2pkt, l2pkt_getl4csumoffset(l2pkt), (char *)&ocsum, 2);
+			l2pkt_l4write(l2pkt, l4len - 2, (char *)&ucsum, 2);
 
-				/* swap l4csum and payload data */
-				int l4csumoff = l2pkt_getl4csumoffset(l2pkt);
-				l2pkt_l4write_raw(l2pkt, l4csumoff, (char *)&ucsum, 2);
-				l2pkt_l4write_raw(l2pkt, l4len - 2, (char *)&ocsum, 2);
-			}
+			uint16_t ocsum;
+			l2pkt_l4read(l2pkt, l2pkt_getl4csumoffset(l2pkt), (char *)&ocsum, 2);
+
+			/* swap l4csum and payload data */
+			int l4csumoff = l2pkt_getl4csumoffset(l2pkt);
+			l2pkt_l4write_raw(l2pkt, l4csumoff, (char *)&ucsum, 2);
+			l2pkt_l4write_raw(l2pkt, l4len - 2, (char *)&ocsum, 2);
 		}
+	}
 
-		if (opt_ip4csum >= 0) {
-			if (opt_bad_ip4csum) {
-				struct ip *ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-				ip->ip_sum = htons(opt_ip4csum);
-			} else {
-				struct ip *ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-				l2pkt_ip4_id(l2pkt, opt_ip4csum);
-				uint16_t tmp = ip->ip_id;
-				ip->ip_id = ip->ip_sum;
-				ip->ip_sum = tmp;
-			}
+	if (opt_ip4csum >= 0) {
+		if (opt_bad_ip4csum) {
+			struct ip *ip = (struct ip *)L2PKT_L3BUF(l2pkt);
+			ip->ip_sum = htons(opt_ip4csum);
+		} else {
+			struct ip *ip = (struct ip *)L2PKT_L3BUF(l2pkt);
+			l2pkt_ip4_id(l2pkt, opt_ip4csum);
+			uint16_t tmp = ip->ip_id;
+			ip->ip_id = ip->ip_sum;
+			ip->ip_sum = tmp;
 		}
 	}
 
 	if (opt_v) {
 		struct protoent *pe;
+		uint16_t sport, dport;
+		const char *qs = "";
+		const char *qe = "";
+		size_t addrsize = sizeof(struct in_addr);
+
+		printf("\n");
 
 		l2pkt_extract(l2pkt);
 
@@ -642,46 +669,36 @@ main(int argc, char *argv[])
 			printf("Protocol %d, ", l2pkt->info.proto);
 		endprotoent();
 
-		if (l2pkt->info.family == 4) {
-			uint16_t sport, dport;
+		if (l2pkt->info.family == AF_INET6) {
+			addrsize = sizeof(struct in6_addr);
+			qs = "[";
+			qe = "]";
+		}
 
-			if (PROTO_HAS_PORT(l2pkt->info.proto)) {
-				printf("%s:%d -> %s:%d\n",
-				    strinaddr(&l2pkt->info.src4), ntohs(l2pkt->info.sport),
-				    strinaddr(&l2pkt->info.dst4), ntohs(l2pkt->info.dport));
-			} else {
-				printf("%s -> %s\n",
-				    strinaddr(&l2pkt->info.src4),
-				    strinaddr(&l2pkt->info.dst4));
-			}
+		if (PROTO_HAS_PORT(l2pkt->info.proto)) {
+			printf("%s%s%s:%d -> %s%s%s:%d\n",
+			    qs, straddr(l2pkt->info.family, &l2pkt->info.src), qe, ntohs(l2pkt->info.sport),
+			    qs, straddr(l2pkt->info.family, &l2pkt->info.dst), qe, ntohs(l2pkt->info.dport));
+		} else {
+			printf("%s -> %s\n",
+			    straddr(l2pkt->info.family, &l2pkt->info.src),
+			    straddr(l2pkt->info.family, &l2pkt->info.dst));
+		}
 
-			uint32_t hash = toeplitz_hash(rsskey, sizeof(rsskey), 
-			    &l2pkt->info.src4, sizeof(l2pkt->info.src4),
-			    &l2pkt->info.dst4, sizeof(l2pkt->info.dst4),
+		uint32_t hash = toeplitz_hash(rsskey, sizeof(rsskey), 
+		    &l2pkt->info.src, addrsize,
+		    &l2pkt->info.dst, addrsize,
+		    NULL);
+		printf("RssHash(2-tuple): 0x%08x\n", hash);
+
+		if (PROTO_HAS_PORT(l2pkt->info.proto)) {
+			uint32_t hash_p = toeplitz_hash(rsskey, sizeof(rsskey), 
+			    &l2pkt->info.src, addrsize,
+			    &l2pkt->info.dst, addrsize,
+			    &l2pkt->info.sport, sizeof(l2pkt->info.sport),
+			    &l2pkt->info.dport, sizeof(l2pkt->info.dport),
 			    NULL);
-			printf("RssHash(2-tuple): 0x%08x\n", hash);
-
-			if (PROTO_HAS_PORT(l2pkt->info.proto)) {
-				uint32_t hash_p = toeplitz_hash(rsskey, sizeof(rsskey), 
-				    &l2pkt->info.src4, sizeof(l2pkt->info.src4),
-				    &l2pkt->info.dst4, sizeof(l2pkt->info.dst4),
-				    &l2pkt->info.sport, sizeof(l2pkt->info.sport),
-				    &l2pkt->info.dport, sizeof(l2pkt->info.dport),
-				    NULL);
-				printf("RssHash(4-tuple): 0x%08x\n", hash_p);
-			}
-
-		} else if (opt_family == 6) {
-			if (PROTO_HAS_PORT(l2pkt->info.proto)) {
-				printf("[%s]:%d -> [%s]:%d\n",
-				    strin6addr(&l2pkt->info.src6), ntohs(l2pkt->info.sport),
-				    strin6addr(&l2pkt->info.dst6), ntohs(l2pkt->info.dport));
-			} else {
-				printf("%s -> %s\n",
-				    strin6addr(&l2pkt->info.src6),
-				    strin6addr(&l2pkt->info.dst6));
-			}
-
+			printf("RssHash(4-tuple): 0x%08x\n", hash_p);
 		}
 
 		printf("\n");
@@ -689,12 +706,12 @@ main(int argc, char *argv[])
 		printf("packetsize: %d bytes\n", packetsize);
 	}
 
-	for (nsend = 0; nsend < npacket; nsend++) {
-		if (opt_X) {
-			printf("L2 framesize = %d, L3 packetsize = %d\n", framesize, packetsize);
-			packetdump(L2PKT_L2BUF(l2pkt), framesize);
-		}
+	if (opt_X) {
+		printf("L2 framesize = %d, L3 packetsize = %d\n", framesize, packetsize);
+		packetdump(L2PKT_L2BUF(l2pkt), framesize);
+	}
 
+	for (nsend = 0; nsend < npacket; nsend++) {
 		r = write(bpf_fd, L2PKT_L2BUF(l2pkt), L2PKT_L2SIZE(l2pkt));
 		if (r < 0)
 			err(3, "write");

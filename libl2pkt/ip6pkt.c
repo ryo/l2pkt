@@ -36,36 +36,6 @@
 #include <netinet/udp.h>
 #include <netinet/tcp.h>
 
-/* XXX: from netinet6/in6.h */
-#if BYTE_ORDER == BIG_ENDIAN
-#define IPV6_ADDR_INT32_ONE		1
-#define IPV6_ADDR_INT32_TWO		2
-#define IPV6_ADDR_INT32_MNL		0xff010000
-#define IPV6_ADDR_INT32_MLL		0xff020000
-#define IPV6_ADDR_INT32_SMP		0x0000ffff
-#define IPV6_ADDR_INT16_ULL		0xfe80
-#define IPV6_ADDR_INT16_USL		0xfec0
-#define IPV6_ADDR_INT16_MLL		0xff02
-#elif BYTE_ORDER == LITTLE_ENDIAN
-#define IPV6_ADDR_INT32_ONE		0x01000000
-#define IPV6_ADDR_INT32_TWO		0x02000000
-#define IPV6_ADDR_INT32_MNL		0x000001ff
-#define IPV6_ADDR_INT32_MLL		0x000002ff
-#define IPV6_ADDR_INT32_SMP		0xffff0000
-#define IPV6_ADDR_INT16_ULL		0x80fe
-#define IPV6_ADDR_INT16_USL		0xc0fe
-#define IPV6_ADDR_INT16_MLL		0x02ff
-#endif
-#ifndef s6_addr8
-#define s6_addr8  __u6_addr.__u6_addr8
-#endif
-#ifndef s6_addr16
-#define s6_addr16 __u6_addr.__u6_addr16
-#endif
-#ifndef s6_addr32
-#define s6_addr32 __u6_addr.__u6_addr32
-#endif
-
 int
 l2pkt_ip6_proto_template(struct l2pkt *l2pkt, uint8_t proto, uint16_t protolen)
 {

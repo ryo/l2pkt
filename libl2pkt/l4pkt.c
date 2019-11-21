@@ -162,20 +162,20 @@ l2pkt_extract(struct l2pkt *l2pkt)
 
 	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
 	if (ip->ip_v == IPVERSION) {
-		l2pkt->info.family = 4;
+		l2pkt->info.family = AF_INET;
 		l2pkt->info.proto = ip->ip_p;
-		memcpy(&l2pkt->info.src4, &ip->ip_src, sizeof(struct in_addr));
-		memcpy(&l2pkt->info.dst4, &ip->ip_dst, sizeof(struct in_addr));
+		memcpy(&l2pkt->info.src.ip4, &ip->ip_src, sizeof(struct in_addr));
+		memcpy(&l2pkt->info.dst.ip4, &ip->ip_dst, sizeof(struct in_addr));
 
 	} else if (ip->ip_v == 6) {
 		ip6 = (struct ip6_hdr *)ip;
-		l2pkt->info.family = 6;
+		l2pkt->info.family = AF_INET6;
 
 		/* XXX: TODO: add support IPv6 extension header */
 		l2pkt->info.proto = ip6->ip6_nxt;
 
-		memcpy(&l2pkt->info.src6, &ip6->ip6_src, sizeof(struct in6_addr));
-		memcpy(&l2pkt->info.dst6, &ip6->ip6_dst, sizeof(struct in6_addr));
+		memcpy(&l2pkt->info.src.ip6, &ip6->ip6_src, sizeof(struct in6_addr));
+		memcpy(&l2pkt->info.dst.ip6, &ip6->ip6_dst, sizeof(struct in6_addr));
 	}
 
 
