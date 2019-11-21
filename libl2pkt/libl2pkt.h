@@ -220,8 +220,8 @@ int l2pkt_tcpwin(struct l2pkt *, uint16_t);
 int l2pkt_tcpurp(struct l2pkt *, uint16_t);
 
 /* utils */
-int fdumpstr(FILE *, const char *, size_t);
-int dumpstr(const char *, size_t);
+int fdumpstr(FILE *, const char *, size_t, bool);
+int dumpstr(const char *, size_t, bool);
 void packetdump(const char *, size_t);
 
 /* tcpdump file output utility */

@@ -34,41 +34,73 @@
 
 #include "libl2pkt.h"
 
+static inline bool
+iszero16(const char *data)
+{
+	int i;
+	for (i = 0; i < 16; i++) {
+		if (data[i] != 0)
+			return false;
+	}
+	return true;
+}
+
 int
-fdumpstr(FILE *fp, const char *data, size_t len)
+fdumpstr(FILE *fp, const char *data, size_t len, bool abbrev_zero)
 {
 	char ascii[17];
 	size_t i;
+	unsigned int lastzero = 0;
 
 	ascii[16] = '\0';
 	for (i = 0; i < len; i++) {
 		unsigned char c;
 
-		if ((i & 15) == 0)
+		if ((i & 15) == 0) {
+			if (abbrev_zero) {
+				if ((len - i) >= 16) {
+					if (iszero16(&data[i])) {
+						if (lastzero) {
+							if (lastzero == 1)
+								fprintf(fp, "*\n");
+							lastzero++;
+							i += 15;
+							continue;
+						}
+						lastzero = 1;
+					} else {
+						lastzero = 0;
+					}
+				}
+			}
 			fprintf(fp, "%08x:", (unsigned int)i);
+		}
 
-		c = *data++;
+		if ((i & 15) == 8)
+			fprintf(fp, " ");
+
+		c = data[i];
 		fprintf(fp, " %02x", c);
 
-		ascii[i & 15] = (0x20 <= c && c <= 0x7f) ? c : '.';
+		ascii[i & 15] = (0x20 <= c && c <= 0x7e) ? c : '.';
 
 		if ((i & 15) == 15)
-			fprintf(fp, " <%s>\n", ascii);
+			fprintf(fp, "  <%s>\n", ascii);
 	}
 	ascii[len & 15] = '\0';
 
 	if (len & 15) {
 		const char *white = "                                                ";
-		fprintf(fp, "%s <%s>\n", &white[(len & 15) * 3], ascii);
+		fprintf(fp, "%s   <%s>\n", &white[(len & 15) * 3], ascii);
 	}
 
 	return 0;
 }
 
 int
-dumpstr(const char *str, size_t len)
+dumpstr(const char *str, size_t len, bool abbrev_zero)
 {
-	return fdumpstr(stdout, str, len);
+	return fdumpstr(stdout, str, len, abbrev_zero);
 }
 
 void
@@ -80,5 +112,5 @@ packetdump(const char *packet, size_t pktsize)
 	eh = (struct ether_header *)packet;
 	strncpy(buf, ether_ntoa((struct ether_addr *)eh->ether_shost), sizeof(buf));
 	printf("%s -> %s, ethertype 0x%04x\n", buf, ether_ntoa((struct ether_addr *)eh->ether_dhost), ntohs(eh->ether_type));
-	dumpstr(packet + sizeof(struct ether_header), pktsize - sizeof(struct ether_header));
+	dumpstr(packet + sizeof(struct ether_header), pktsize - sizeof(struct ether_header), true);
 }
