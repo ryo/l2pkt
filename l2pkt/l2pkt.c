@@ -199,7 +199,7 @@ main(int argc, char *argv[])
 	struct in6_addr ip6src, ip6dst;
 	bool opt_srcport = false;
 	bool opt_dstport = false;
-	bool opt_X = false;
+	int opt_hexdump = 0;
 	int opt_fragoff = 0;
 	int opt_ip4csum = -1;
 	int opt_l4csum = -1;
@@ -330,7 +330,7 @@ main(int argc, char *argv[])
 			opt_timestamp++;
 			break;
 		case 'X':
-			opt_X = true;
+			opt_hexdump++;
 			break;
 		case 'f':
 			if (parsenum(optarg, &framesize, 0, MAXFRAMESIZE) != 0)
@@ -706,9 +706,9 @@ main(int argc, char *argv[])
 		printf("packetsize: %d bytes\n", packetsize);
 	}
 
-	if (opt_X) {
+	if (opt_hexdump) {
 		printf("L2 framesize = %d, L3 packetsize = %d\n", framesize, packetsize);
-		packetdump(L2PKT_L2BUF(l2pkt), framesize);
+		packetdump(L2PKT_L2BUF(l2pkt), framesize, (opt_hexdump == 1));
 	}
 
 	for (nsend = 0; nsend < npacket; nsend++) {
