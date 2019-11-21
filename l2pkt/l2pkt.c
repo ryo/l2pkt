@@ -638,7 +638,7 @@ main(int argc, char *argv[])
 		}
 	}
 
-	if (opt_ip4csum >= 0) {
+	if ((opt_ip4csum >= 0) && (opt_family == AF_INET)) {
 		if (opt_bad_ip4csum) {
 			struct ip *ip = (struct ip *)L2PKT_L3BUF(l2pkt);
 			ip->ip_sum = htons(opt_ip4csum);

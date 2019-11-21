@@ -112,20 +112,24 @@ int
 l2pkt_getl4length(struct l2pkt *l2pkt)
 {
 	struct ip *ip;
+	struct ip6_hdr *ip6;
+	uint8_t proto = 0;
+	uint16_t protolen;
 
 	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-	if (ip->ip_v != IPVERSION) {
-		fprintf(stderr, "%s:%d: not support IPv%d\n", __func__, __LINE__, ip->ip_v);
-		return 0;	// XXX: IPv6 not yet
+	if (ip->ip_v == IPVERSION) {
+		proto = ip->ip_p;
+	} else if (ip->ip_v == 6) {
+		ip6 = (struct ip6_hdr *)ip;
+		/* XXX: TODO: add support IPv6 extension header */
+		return ntohs(ip6->ip6_plen);
 	}
 
-	switch (ip->ip_p) {
+	/* IPv4 */
+	switch (proto) {
 	case IPPROTO_UDP:
-		{
-			struct udphdr *udp = (struct udphdr *)((char *)ip + ip->ip_hl * 4);
-			return ntohs(udp->uh_ulen);
-		}
-		break;
+		l2pkt_l4read(l2pkt, offsetof(struct udphdr, uh_ulen), (char *)&protolen, sizeof(uint16_t));
+		return ntohs(protolen);
 	default:
 		break;
 	}
