@@ -49,6 +49,8 @@ toeplitz_hash(const uint8_t *keyp, size_t keylen, ...)
 	uint8_t *datap, key, data;
 	const uint8_t *keyend;
 
+	keyend = keyp + keylen;
+
 	/* first 32bit is initial vector */
 	v = *keyp++;
 	v <<= 8;
@@ -59,9 +61,7 @@ toeplitz_hash(const uint8_t *keyp, size_t keylen, ...)
 	v |= *keyp++;
 
 	hash = 0;
-
 	va_start(ap, keylen);
-	keyend = keyp + keylen;
 
 	while ((datap = va_arg(ap, uint8_t *)) != NULL) {
 		for (datalen = va_arg(ap, size_t); datalen > 0; datalen--) {
