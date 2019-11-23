@@ -618,7 +618,7 @@ main(int argc, char *argv[])
 		if ((l4len - l4hdrlen) < sizeof(uint16_t))
 			errx(5, "no space in L4 payload for adjusting checksum. increase packetsize");
 
-		if (opt_bad_l4csum) {
+		if (opt_bad_l4csum || (opt_protocol == IPPROTO_UDP && opt_l4csum == 0)) {
 			uint16_t ucsum = htons(opt_l4csum);
 			int l4csumoff = l2pkt_getl4csumoffset(l2pkt);
 			l2pkt_l4write_raw(l2pkt, l4csumoff, (char *)&ucsum, 2);
