@@ -170,7 +170,7 @@ l2pkt_extract(struct l2pkt *l2pkt)
 		l2pkt->info.proto = ip->ip_p;
 		memcpy(&l2pkt->info.src.ip4, &ip->ip_src, sizeof(struct in_addr));
 		memcpy(&l2pkt->info.dst.ip4, &ip->ip_dst, sizeof(struct in_addr));
-
+		l2pkt->info.l3csum = ip->ip_sum;
 	} else if (ip->ip_v == 6) {
 		ip6 = (struct ip6_hdr *)ip;
 		l2pkt->info.family = AF_INET6;
@@ -180,17 +180,23 @@ l2pkt_extract(struct l2pkt *l2pkt)
 
 		memcpy(&l2pkt->info.src.ip6, &ip6->ip6_src, sizeof(struct in6_addr));
 		memcpy(&l2pkt->info.dst.ip6, &ip6->ip6_dst, sizeof(struct in6_addr));
+		l2pkt->info.l3csum = 0;
 	}
 
 
 	switch (l2pkt->info.proto) {
+	case IPPROTO_ICMP:
+		l2pkt_l4read(l2pkt, offsetof(struct icmp, icmp_cksum), (char *)&l2pkt->info.l4csum, sizeof(uint16_t));
+		break;
 	case IPPROTO_UDP:
 		l2pkt_l4read(l2pkt, offsetof(struct udphdr, uh_sport), (char *)&l2pkt->info.sport, sizeof(uint16_t));
 		l2pkt_l4read(l2pkt, offsetof(struct udphdr, uh_dport), (char *)&l2pkt->info.dport, sizeof(uint16_t));
+		l2pkt_l4read(l2pkt, offsetof(struct udphdr, uh_sum), (char *)&l2pkt->info.l4csum, sizeof(uint16_t));
 		break;
 	case IPPROTO_TCP:
 		l2pkt_l4read(l2pkt, offsetof(struct tcphdr, th_sport), (char *)&l2pkt->info.sport, sizeof(uint16_t));
 		l2pkt_l4read(l2pkt, offsetof(struct tcphdr, th_dport), (char *)&l2pkt->info.dport, sizeof(uint16_t));
+		l2pkt_l4read(l2pkt, offsetof(struct tcphdr, th_sum), (char *)&l2pkt->info.l4csum, sizeof(uint16_t));
 		break;
 	default:
 		break;
@@ -205,7 +211,9 @@ l2pkt_l4write(struct l2pkt *l2pkt, unsigned int offset, char *data, unsigned int
 	uint16_t *sump;
 	char *datap;
 	uint32_t sum;
+	uint8_t proto;
 
+	proto = l2pkt_getl4protocol(l2pkt);
 	sump = (uint16_t *)(L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt) + l2pkt_getl4csumoffset(l2pkt));
 	datap = L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt) + offset;
 
@@ -248,6 +256,9 @@ l2pkt_l4write(struct l2pkt *l2pkt, unsigned int offset, char *data, unsigned int
 		}
 	}
 	*sump = ~sum;
+
+	if ((proto == IPPROTO_UDP) && (*sump == 0))
+		*sump = 0xffff;
 
 	return 0;
 }

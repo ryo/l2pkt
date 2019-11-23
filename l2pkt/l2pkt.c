@@ -685,6 +685,9 @@ main(int argc, char *argv[])
 			    straddr(l2pkt->info.family, &l2pkt->info.dst));
 		}
 
+		printf("L3 cksum: 0x%04x (~0x%04x)\n", ntohs(l2pkt->info.l3csum), ~ntohs(l2pkt->info.l3csum) & 0xffff);
+		printf("L4 cksum: 0x%04x (~0x%04x)\n", ntohs(l2pkt->info.l4csum), ~ntohs(l2pkt->info.l4csum) & 0xffff);
+
 		uint32_t hash = toeplitz_hash(rsskey, sizeof(rsskey), 
 		    &l2pkt->info.src, addrsize,
 		    &l2pkt->info.dst, addrsize,

@@ -169,6 +169,8 @@ l2pkt_ip4_udp_template(struct l2pkt *l2pkt, uint16_t udplen)
 	udp->uh_ulen = htons(udplen);
 	udp->uh_sum = 0;
 	udp->uh_sum = in4_cksum(ip->ip_src, ip->ip_dst, ip->ip_p, (char *)udp, udplen);
+	if (udp->uh_sum == 0)
+		udp->uh_sum = 0xffff;
 
 	return 0;
 }
@@ -221,6 +223,8 @@ l2pkt_ip4_length(struct l2pkt *l2pkt, uint16_t iplen)
 			sum += udp->uh_ulen;	/* for pseudo header */
 			sum += udp->uh_ulen;	/* for udp->uh_ulen */
 			udp->uh_sum = ~reduce1(sum);
+			if (udp->uh_sum == 0)
+				udp->uh_sum = 0xffff;
 		}
 		break;
 	case IPPROTO_TCP:
@@ -346,6 +350,8 @@ l2pkt_ip4_srcdst(struct l2pkt *l2pkt, int srcdst, in_addr_t addr)
 		sum += (addr >> 16) & 0xffff;
 		sum += addr & 0xffff;
 		udp->uh_sum = ~reduce1(sum);
+		if (udp->uh_sum == 0)
+			udp->uh_sum = 0xffff;
 	} else if (ip->ip_p == IPPROTO_TCP) {
 		struct tcphdr *tcp = (struct tcphdr *)((char *)ip + ip->ip_hl * 4);
 		sum = ~tcp->th_sum & 0xffff;

@@ -83,6 +83,8 @@ struct l2pkt {
 			struct in_addr ip4;
 			struct in6_addr ip6;
 		} src, dst;
+		uint16_t l3csum;	/* IPv4 */
+		uint16_t l4csum;	/* TCP/UDP/ICMP */
 		uint16_t sport, dport;
 		uint8_t proto;
 	} info;
