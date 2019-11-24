@@ -509,9 +509,13 @@ main(int argc, char *argv[])
 		if (opt_ip6dst)
 			l2pkt_ip6_dst(l2pkt, &ip6dst);
 
-//		if (opt_fragoff != 0) {
-//			l2pkt_ip6_off(l2pkt, opt_fragoff);
-//		}
+		if (opt_fragoff != 0) {
+			/*
+			 * L3 header will be incresed.
+			 * L4 size will be decrease sizeof(ip6_frag) bytes
+			 */
+			l2pkt_ip6_off(l2pkt, opt_fragoff, false, 0x1234);
+		}
 	}
 
 	if (opt_srcport)

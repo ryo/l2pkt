@@ -188,6 +188,8 @@ int l2pkt_ip6_proto_template(struct l2pkt *, uint8_t, uint16_t);
 int l2pkt_ip6_icmp6_template(struct l2pkt *, uint16_t);
 int l2pkt_ip6_udp_template(struct l2pkt *, uint16_t);
 int l2pkt_ip6_tcp_template(struct l2pkt *, uint16_t);
+int l2pkt_ip6_prepend_exthdr(struct l2pkt *, const char *, unsigned int);
+int l2pkt_ip6_off(struct l2pkt *, uint16_t, bool, uint16_t);
 
 /* l4pkt.c */
 int l2pkt_extract(struct l2pkt *);	/* extract to l2pkt->info */

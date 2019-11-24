@@ -159,3 +159,41 @@ l2pkt_ip6_dst(struct l2pkt *l2pkt, struct in6_addr *addr)
 {
 	return l2pkt_ip6_srcdst(l2pkt, 1, addr);
 }
+
+int
+l2pkt_ip6_prepend_exthdr(struct l2pkt *l2pkt, const char *exthdr, unsigned int exthdrlen)
+{
+	struct ip6_hdr *ip6;
+	char *nxtp;
+
+	ip6 = (struct ip6_hdr *)L2PKT_L3BUF(l2pkt);
+	nxtp = (char *)(ip6 + 1);
+
+	uint16_t oldlen = ntohs(ip6->ip6_plen);
+	ip6->ip6_nxt = IPPROTO_FRAGMENT;
+
+	// XXX: L3 header will enlarge. L4 length will be decreased.
+//	ip6->ip6_plen = htons(oldlen + exthdrlen);
+
+	memmove(nxtp + exthdrlen, nxtp, oldlen);
+	memcpy(nxtp, exthdr, exthdrlen);
+
+	return 0;
+}
+
+int
+l2pkt_ip6_off(struct l2pkt *l2pkt, uint16_t off, bool morefrag, uint16_t id)
+{
+	struct ip6_hdr *ip6;
+	struct ip6_frag ip6frag;
+
+	ip6 = (struct ip6_hdr *)L2PKT_L3BUF(l2pkt);
+
+	memset(&ip6frag, 0, sizeof(ip6frag));
+	ip6frag.ip6f_nxt = ip6->ip6_nxt;
+	ip6frag.ip6f_offlg = htons(off) | (morefrag ? IP6F_MORE_FRAG : 0);
+	ip6frag.ip6f_ident = htons(id);
+
+
+	return l2pkt_ip6_prepend_exthdr(l2pkt, (char *)&ip6frag, sizeof(ip6frag));
+}
