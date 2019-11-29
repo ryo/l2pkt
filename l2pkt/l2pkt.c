@@ -689,7 +689,10 @@ main(int argc, char *argv[])
 			    straddr(l2pkt->info.family, &l2pkt->info.dst));
 		}
 
-		printf("L3 cksum: 0x%04x (~0x%04x)\n", ntohs(l2pkt->info.l3csum), ~ntohs(l2pkt->info.l3csum) & 0xffff);
+		if (opt_family == AF_INET6)
+			printf("L3 cksum: -\n");
+		else
+			printf("L3 cksum: 0x%04x (~0x%04x)\n", ntohs(l2pkt->info.l3csum), ~ntohs(l2pkt->info.l3csum) & 0xffff);
 		printf("L4 cksum: 0x%04x (~0x%04x)\n", ntohs(l2pkt->info.l4csum), ~ntohs(l2pkt->info.l4csum) & 0xffff);
 
 		uint32_t hash = toeplitz_hash(rsskey, sizeof(rsskey), 
