@@ -49,6 +49,7 @@ struct option long_options[] = {
 	{ "bad-l4csum",		no_argument,		&opt_bad_l4csum, 1 },
 	{ "rsshash2",		required_argument,	NULL, 0 },
 	{ "rsshash4",		required_argument,	NULL, 0 },
+	{ "tcpflags",		required_argument,	NULL, 0 },
 	{ 0, 0, 0, 0 }
 };
 
@@ -77,6 +78,7 @@ usage()
 	fprintf(stderr, "	--bad-l4csum		don't adjust L4 checksum\n");
 	fprintf(stderr, "	--rsshash2 <idx>/<mod>	specify 2-tuple rsshash by modifying source addr\n");
 	fprintf(stderr, "	--rsshash4 <idx>/<mod>	specify 4-tuple rsshash by modifying source/dest port\n");
+	fprintf(stderr, "	--tcpflags [FSRPAUEC-]	specify TCP flags\n");
 	fprintf(stderr, "	-T			fill 16byte timestamp string in the end of packet\n");
 	fprintf(stderr, "	-i <interface>		output interface\n");
 	fprintf(stderr, "	-n <npacket>		output N packets (default: 1)\n");
@@ -211,6 +213,7 @@ main(int argc, char *argv[])
 	int framesize = -1;
 	int ethertype = 0x88b5;	/* IEEE Std 802 - Local Experimental Ethertype */
 	char *ifname = NULL;
+	int opt_tcpflags = -1;
 
 	memset(&eaddr_src, 0x00, sizeof(eaddr_src));
 	memset(&eaddr_dst, 0xff, sizeof(eaddr_dst));
@@ -299,6 +302,43 @@ main(int argc, char *argv[])
 					if (opt_rsshash4idx >= opt_rsshash4mod)
 						errx(1, "rsshash <idx> less than <mod>: %s", optarg);
 
+				} else if (strcmp("--tcpflags", optname) == 0) {
+					char *p = optarg;
+					opt_tcpflags = 0;
+					for (; *p != '\0'; p++) {
+						switch (*p) {
+						case 'F':
+							opt_tcpflags |= TH_FIN;
+							break;
+						case 'S':
+							opt_tcpflags |= TH_SYN;
+							break;
+						case 'R':
+							opt_tcpflags |= TH_RST;
+							break;
+						case 'P':
+							opt_tcpflags |= TH_PUSH;
+							break;
+						case 'A':
+						case '.':
+							opt_tcpflags |= TH_ACK;
+							break;
+						case 'U':
+							opt_tcpflags |= TH_URG;
+							break;
+						case 'E':
+							opt_tcpflags |= TH_ECE;
+							break;
+						case 'C':
+							opt_tcpflags |= TH_CWR;
+							break;
+						case '-':
+						case '0':
+							break;
+						default:
+							errx(1, "available tcpflags are 'FSRPAUEC': %s", optarg);
+						}
+					}
 				} else {
 					errx(1, "unknown option: %s", optname);
 				}
@@ -523,6 +563,9 @@ main(int argc, char *argv[])
 		l2pkt_srcport(l2pkt, srcport);
 	if (opt_dstport)
 		l2pkt_dstport(l2pkt, dstport);
+
+	if (opt_tcpflags >= 0 && opt_protocol == IPPROTO_TCP)
+		l2pkt_tcpflags(l2pkt, opt_tcpflags);
 
 	if (opt_rsshash2mod | opt_rsshash4mod) {
 		union {
