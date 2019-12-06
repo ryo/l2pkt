@@ -40,6 +40,7 @@ struct option long_options[] = {
 	{ "dst",		required_argument,	NULL, 0 },
 	{ "proto",		required_argument,	NULL, 0 },
 	{ "ttl",		required_argument,	NULL, 0 },
+	{ "tos",		required_argument,	NULL, 0 },
 	{ "fragoff",		required_argument,	NULL, 0 },
 	{ "srcport",		required_argument,	NULL, 0 },
 	{ "dstport",		required_argument,	NULL, 0 },
@@ -66,6 +67,7 @@ usage()
 	fprintf(stderr, "	--src <addr>		source address\n");
 	fprintf(stderr, "	--dst <addr>		destination address\n");
 	fprintf(stderr, "	--proto <proto>		protocol\n");
+	fprintf(stderr, "	--tos <tos>			type of service (default: 0)\n");
 	fprintf(stderr, "	--ttl <ttl>			TTL (default: 0)\n");
 	fprintf(stderr, "	--fragoff <offset>	fragment offset (default: 0)\n");
 	fprintf(stderr, "	--srcport <port>	source port\n");
@@ -179,7 +181,8 @@ main(int argc, char *argv[])
 	int opt_randseed = getpid();
 	int opt_random = 0;
 	int opt_protocol = -1;
-	int opt_ttl = 0;
+	int opt_tos = -1;
+	int opt_ttl = -1;
 	uint32_t opt_rsshash2idx = 0, opt_rsshash2mod = 0;
 	uint32_t opt_rsshash4idx = 0, opt_rsshash4mod = 0;
 	bool opt_ip4src = false;
@@ -244,6 +247,9 @@ main(int argc, char *argv[])
 						opt_ip4dst = true;
 					else
 						errx(1, "invalid address: %s", optarg);
+				} else if (strcmp("--tos", optname) == 0) {
+					if (parsenum(optarg, &opt_tos, 0, 0xff) != 0)
+						errx(1, "invalid tos: %s", optarg);
 				} else if (strcmp("--ttl", optname) == 0) {
 					if (parsenum(optarg, &opt_ttl, 0, 0xff) != 0)
 						errx(1, "invalid ttl: %s", optarg);
@@ -496,7 +502,10 @@ main(int argc, char *argv[])
 		l2pkt_ip4_off(l2pkt, 1234);
 		l2pkt_ip4_id(l2pkt, 0x8765);
 #endif
-		if (opt_ttl > 0)
+		if (opt_tos >= 0)
+			l2pkt_ip4_tos(l2pkt, opt_tos);
+
+		if (opt_ttl >= 0)
 			l2pkt_ip4_ttl(l2pkt, opt_ttl);
 
 		if (opt_ip4src)

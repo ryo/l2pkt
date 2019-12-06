@@ -291,6 +291,30 @@ l2pkt_ip4_id(struct l2pkt *l2pkt, uint16_t id)
 }
 
 int
+l2pkt_ip4_tos(struct l2pkt *l2pkt, uint8_t tos)
+{
+	struct ip *ip;
+	uint32_t sum;
+
+	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
+	if (ip->ip_v != IPVERSION)
+		return -1;
+
+	sum = ~ip->ip_sum & 0xffff;
+#if _BYTE_ORDER == _LITTLE_ENDIAN
+	sum -= (ip->ip_tos << 8);
+	sum += tos << 8;
+#else
+	sum -= (ip->ip_tos);
+	sum += tos;
+#endif
+	ip->ip_sum = ~reduce1(sum);
+	ip->ip_tos = tos;
+
+	return 0;
+}
+
+int
 l2pkt_ip4_ttl(struct l2pkt *l2pkt, uint8_t ttl)
 {
 	struct ip *ip;

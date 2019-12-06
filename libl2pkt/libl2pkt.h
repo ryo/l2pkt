@@ -173,6 +173,7 @@ int l2pkt_ip4_arpreply(struct l2pkt *, const char *, u_char *, in_addr_t, in_add
 int l2pkt_ip4_length(struct l2pkt *, uint16_t);
 int l2pkt_ip4_off(struct l2pkt *, uint16_t);
 int l2pkt_ip4_id(struct l2pkt *, uint16_t);
+int l2pkt_ip4_tos(struct l2pkt *, uint8_t);
 int l2pkt_ip4_ttl(struct l2pkt *, uint8_t);
 int l2pkt_ip4_src(struct l2pkt *, in_addr_t);
 int l2pkt_ip4_dst(struct l2pkt *, in_addr_t);
