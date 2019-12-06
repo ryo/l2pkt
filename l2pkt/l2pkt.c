@@ -143,30 +143,18 @@ straddr(int af, const void * restrict addr)
 }
 
 static int
-parsehex(const char *str, int *v, unsigned int min, unsigned int max)
+parsenum(const char *str, int *v, long long min, long long max)
 {
-	long long int x;
+	long long x;
 	char *ep = NULL;
+	int base = 10;
 
-	x = strtoll(str, &ep, 16);
-	if (ep == str)
-		return -1;
-	if (x < min)
-		return -2;
-	if (x > max)
-		return -3;
+	if (strncasecmp(str, "0x", 2) == 0) {
+		base = 16;
+		str += 2;
+	}
 
-	*v = x;
-	return 0;
-}
-
-static int
-parsenum(const char *str, int *v, unsigned int min, unsigned int max)
-{
-	long long int x;
-	char *ep = NULL;
-
-	x = strtoll(str, &ep, 0);
+	x = strtoll(str, &ep, base);
 	if (ep == str)
 		return -1;
 	if (x < min)
@@ -282,9 +270,9 @@ main(int argc, char *argv[])
 					if (q == NULL)
 						errx(1, "invalid rsshash. e.g.) \"3/16\": %s", optarg);
 					*q++ = '\0';
-					if (parsehex(p, &opt_rsshash2idx, 0, 0xffffffff) != 0)
+					if (parsenum(p, &opt_rsshash2idx, 0, 0xffffffff) != 0)
 						errx(1, "invalid rsshash: %s", p);
-					if (parsehex(q, &opt_rsshash2mod, 0, 0xffffffff) != 0)
+					if (parsenum(q, &opt_rsshash2mod, 0, 0xffffffff) != 0)
 						errx(1, "invalid rsshash: %s", q);
 					if (opt_rsshash2idx >= opt_rsshash2mod)
 						errx(1, "rsshash <idx> less than <mod>: %s", optarg);
@@ -295,9 +283,9 @@ main(int argc, char *argv[])
 					if (q == NULL)
 						errx(1, "invalid rsshash. e.g.) \"3/16\": %s", optarg);
 					*q++ = '\0';
-					if (parsehex(p, &opt_rsshash4idx, 0, 0xffffffff) != 0)
+					if (parsenum(p, &opt_rsshash4idx, 0, 0xffffffff) != 0)
 						errx(1, "invalid rsshash: %s", p);
-					if (parsehex(q, &opt_rsshash4mod, 0, 0xffffffff) != 0)
+					if (parsenum(q, &opt_rsshash4mod, 0, 0xffffffff) != 0)
 						errx(1, "invalid rsshash: %s", q);
 					if (opt_rsshash4idx >= opt_rsshash4mod)
 						errx(1, "rsshash <idx> less than <mod>: %s", optarg);
@@ -396,7 +384,7 @@ main(int argc, char *argv[])
 				errx(1, "illegal packetsize: %s", optarg);
 			break;
 		case 't':
-			if (parsehex(optarg, &ethertype, 0, 0xffff) != 0)
+			if (parsenum(optarg, &ethertype, 0, 0xffff) != 0)
 				errx(1, "illegal ethertype: %s", optarg);
 			break;
 		case 'v':
