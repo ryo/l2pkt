@@ -67,8 +67,8 @@ usage()
 	fprintf(stderr, "	--src <addr>		source address\n");
 	fprintf(stderr, "	--dst <addr>		destination address\n");
 	fprintf(stderr, "	--proto <proto>		protocol\n");
-	fprintf(stderr, "	--tos <tos>			type of service (default: 0)\n");
-	fprintf(stderr, "	--ttl <ttl>			TTL (default: 0)\n");
+	fprintf(stderr, "	--tos <tos>		type of service (default: 0)\n");
+	fprintf(stderr, "	--ttl <ttl>		TTL (default: 0)\n");
 	fprintf(stderr, "	--fragoff <offset>	fragment offset (default: 0)\n");
 	fprintf(stderr, "	--srcport <port>	source port\n");
 	fprintf(stderr, "	--dstport <port>	destination port\n");
