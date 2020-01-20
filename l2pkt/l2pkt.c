@@ -33,6 +33,7 @@ static int opt_v;
 static int opt_bad_ip4csum = 0;
 static int opt_bad_l4csum = 0;
 static struct l2pkt *l2pkt;
+static int vlanid = -1;
 
 
 struct option long_options[] = {
@@ -60,6 +61,7 @@ usage()
 	fprintf(stderr, "usage: l2pkt [option]\n");
 	fprintf(stderr, "	-D <etheraddr>		destination mac address (default: ff:ff:ff:ff:ff:ff)\n");
 	fprintf(stderr, "	-S <etheraddr>		source mac address (default: own addr)\n");
+	fprintf(stderr, "	-V <vid>		VLAN ID\n");
 	fprintf(stderr, "	-X			dump generated packet\n");
 //	fprintf(stderr, "	-a			build arp query packet\n");
 	fprintf(stderr, "	-4			build IPv4 packet\n");
@@ -172,6 +174,7 @@ int
 main(int argc, char *argv[])
 {
 	struct ether_addr *eaddr, eaddr_src, eaddr_dst;
+	int ether_header_size;
 	ssize_t r;
 	int npacket = 1;
 	unsigned long nsend;
@@ -209,7 +212,7 @@ main(int argc, char *argv[])
 	memset(&eaddr_src, 0x00, sizeof(eaddr_src));
 	memset(&eaddr_dst, 0xff, sizeof(eaddr_dst));
 
-	while ((ch = getopt_long(argc, argv, "46D:R:S:TXf:i:t:n:rs:v", long_options, NULL)) != -1) {
+	while ((ch = getopt_long(argc, argv, "46D:R:S:TXf:i:t:n:rs:V:v", long_options, NULL)) != -1) {
 		switch (ch) {
 		case 0:
 			if (optind < 2) {
@@ -396,6 +399,10 @@ main(int argc, char *argv[])
 		case 'v':
 			opt_v++;
 			break;
+		case 'V':
+			if (parsenum(optarg, &vlanid, 1, 4094) != 0)
+				errx(1, "illegal vlan id: %s", optarg);
+			break;
 		default:
 			usage();
 		}
@@ -407,15 +414,20 @@ main(int argc, char *argv[])
 		usage();
 
 
+	ether_header_size = sizeof(struct ether_header);
+	if (vlanid != -1)
+		ether_header_size += 4;
+
 	if ((framesize == -1) && (packetsize == -1)) {
 		packetsize = 46;
-		framesize = packetsize + sizeof(struct ether_header);
+		framesize = packetsize + ether_header_size;
 	} else if (framesize == -1) {
-		framesize = packetsize + sizeof(struct ether_header);
+		framesize = packetsize + ether_header_size;
 	} else if (packetsize == -1) {
-		packetsize = framesize - sizeof(struct ether_header);
-	} else if (framesize < packetsize + sizeof(struct ether_header)) {
-		fprintf(stderr, "Warning: framesize (%d) is greater than packetsize (%d) + 14\n", framesize, packetsize);
+		packetsize = framesize - ether_header_size;
+	} else if (framesize < packetsize + ether_header_size) {
+		fprintf(stderr, "Warning: framesize (%d) is greater than packetsize (%d) + L2 header size (%d)\n",
+		    framesize, packetsize, ether_header_size);
 	}
 
 
@@ -443,6 +455,8 @@ main(int argc, char *argv[])
 	}
 
 	l2pkt_setframesize(l2pkt, framesize);
+	if (vlanid != -1)
+		l2pkt_ethpkt_vlan(l2pkt, vlanid);
 	l2pkt_ethpkt_type(l2pkt, ethertype);
 	l2pkt_ethpkt_src(l2pkt, &eaddr_src);
 	l2pkt_ethpkt_dst(l2pkt, &eaddr_dst);

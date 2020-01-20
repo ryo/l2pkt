@@ -52,12 +52,29 @@ l2pkt_ethpkt_template(struct l2pkt *l2pkt)
 }
 
 int
+l2pkt_ethpkt_vlan(struct l2pkt *l2pkt, uint16_t tag)
+{
+	struct ether_vlan_header *evl;
+
+	evl = (struct ether_vlan_header *)L2PKT_BUFFER(l2pkt);
+	evl->evl_encap_proto = htons(ETHERTYPE_VLAN);
+	evl->evl_tag = htons(tag);
+	return 0;
+}
+
+int
 l2pkt_ethpkt_type(struct l2pkt *l2pkt, uint16_t type)
 {
+	struct ether_vlan_header *evl;
 	struct ether_header *eh;
 
 	eh = (struct ether_header *)L2PKT_BUFFER(l2pkt);
-	eh->ether_type = htons(type);
+	if (eh->ether_type == htons(ETHERTYPE_VLAN)) {
+		evl = (struct ether_vlan_header *)eh;
+		evl->evl_proto = htons(type);
+	} else {
+		eh->ether_type = htons(type);
+	}
 	return 0;
 }
 

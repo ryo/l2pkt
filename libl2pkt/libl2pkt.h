@@ -93,12 +93,23 @@ struct l2pkt {
 	char buf[LIBL2PKT_MAXPKTSIZE + 1024];
 };
 
+struct ether_vlan_header {
+	uint8_t evl_dhost[ETHER_ADDR_LEN];
+	uint8_t evl_shost[ETHER_ADDR_LEN];
+	uint16_t evl_encap_proto;
+	uint16_t evl_tag;
+	uint16_t evl_proto;
+} __packed;
+
+
 #define L2PKT_BUFFER(pkt)	((pkt)->buf)
 #define L2PKT_L2BUF(pkt)	L2PKT_BUFFER((pkt))
-#define L2PKT_L3BUF(pkt)	(L2PKT_L2BUF((pkt)) + sizeof(struct ether_header))
-
+#define L2PKT_L2HEADERSIZE(pkt)	\
+	((((struct ether_header *)L2PKT_L2BUF(pkt))->ether_type == htons(ETHERTYPE_VLAN)) ?	\
+	    sizeof(struct ether_vlan_header) : sizeof(struct ether_header))
+#define L2PKT_L3BUF(pkt)	(L2PKT_L2BUF((pkt)) + L2PKT_L2HEADERSIZE(pkt))
 #define L2PKT_L2SIZE(pkt)	((pkt)->framesize)
-#define L2PKT_L3SIZE(pkt)	(L2PKT_L2SIZE((pkt)) - sizeof(struct ether_header))
+#define L2PKT_L3SIZE(pkt)	(L2PKT_L2SIZE((pkt)) - L2PKT_L2HEADERSIZE(pkt))
 #define L2PKT_IN_RANGE(pkt, p)	(((p) - L2PKT_BUFFER((pkt))) < (pkt)->framesize)
 
 /* ethernet arp packet */
@@ -162,6 +173,7 @@ unsigned int in_cksum(unsigned int, char *, unsigned int);
 
 /* etherpkt.c */
 int l2pkt_ethpkt_template(struct l2pkt *);
+int l2pkt_ethpkt_vlan(struct l2pkt *, uint16_t);
 int l2pkt_ethpkt_type(struct l2pkt *, uint16_t);
 int l2pkt_ethpkt_src(struct l2pkt *, struct ether_addr *);
 int l2pkt_ethpkt_dst(struct l2pkt *, struct ether_addr *);
