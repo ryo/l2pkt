@@ -400,7 +400,7 @@ main(int argc, char *argv[])
 			opt_v++;
 			break;
 		case 'V':
-			if (parsenum(optarg, &vlanid, 1, 4094) != 0)
+			if (parsenum(optarg, &vlanid, 0, 65535) != 0)
 				errx(1, "illegal vlan id: %s", optarg);
 			break;
 		default:
