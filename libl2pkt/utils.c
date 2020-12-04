@@ -110,7 +110,7 @@ packetdump(const char *packet, size_t pktsize, bool abbrev)
 	struct ether_header *eh;
 
 	eh = (struct ether_header *)packet;
-	strncpy(buf, ether_ntoa((struct ether_addr *)eh->ether_shost), sizeof(buf));
+	strlcpy(buf, ether_ntoa((struct ether_addr *)eh->ether_shost), sizeof(buf));
 	printf("%s -> %s, ethertype 0x%04x\n", buf, ether_ntoa((struct ether_addr *)eh->ether_dhost), ntohs(eh->ether_type));
 	dumpstr(packet + sizeof(struct ether_header), pktsize - sizeof(struct ether_header), abbrev);
 }
