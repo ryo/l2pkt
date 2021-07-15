@@ -358,10 +358,10 @@ main(int argc, char *argv[])
 				errx(1, "illegal mac address: %s", optarg);
 			}
 			if (ch == 'D') {
-				memcpy(&eaddr_dst, eaddr, sizeof(eaddr));
+				memcpy(&eaddr_dst, eaddr, sizeof(eaddr_dst));
 			} else if (ch == 'S') {
 				bpf_hdrcmplt = 1;
-				memcpy(&eaddr_src, eaddr, sizeof(eaddr));
+				memcpy(&eaddr_src, eaddr, sizeof(eaddr_src));
 			}
 			break;
 		case 'T':
