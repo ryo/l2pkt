@@ -16,23 +16,20 @@ uint8_t rsskey[RSSKEY_SIZE] = {
  * e.g.)
  *
  * struct in_addr src, dst;
- * uint16_t srcport, dstport;
- * toeplitz_hash(rsskey[], sizeof(rsskey),
+ * toeplitz_vhash(rsskey[], sizeof(rsskey),
  *                   &src, sizeof(src),
  *                   &dst, sizeof(dst),
- *                   &srcport, sizeof(srcport),
- *                   &dstport, sizeof(dstport),
  *                   NULL);
  *
  * struct in6_addr src6, dst6;
- * toeplitz_hash(rsskey[], sizeof(rsskey),
+ * toeplitz_vhash(rsskey[], sizeof(rsskey),
  *                   &src6, sizeof(src6),
  *                   &dst6, sizeof(dst6),
  *                   NULL);
  *
  * struct ip *ip;
  * struct tcphdr *tcp;
- * toeplitz_hash(rsskey[], sizeof(rsskey),
+ * toeplitz_vhash(rsskey[], sizeof(rsskey),
  *                   &ip->ip_src, sizeof(ip->ip_src),
  *                   &ip->ip_dst, sizeof(ip->ip_dst),
  *                   &tcp->th_sport, sizeof(tcp->th_sport),
@@ -41,7 +38,7 @@ uint8_t rsskey[RSSKEY_SIZE] = {
  *
  */
 uint32_t
-toeplitz_hash(const uint8_t *keyp, size_t keylen, ...)
+toeplitz_vhash(const uint8_t *keyp, size_t keylen, ...)
 {
 	va_list ap;
 	uint32_t hash, v;

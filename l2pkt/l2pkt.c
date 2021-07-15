@@ -598,7 +598,7 @@ main(int argc, char *argv[])
 			memcpy(&dst, &l2pkt->info.dst, addrlen);
 
 			for (i = 0; ; i++) {
-				hash = toeplitz_hash(rsskey, sizeof(rsskey), 
+				hash = toeplitz_vhash(rsskey, sizeof(rsskey),
 				    &src, addrlen,
 				    &dst, addrlen,
 				    NULL);
@@ -640,7 +640,7 @@ main(int argc, char *argv[])
 
 			for (j = 0; j < 65536; j++) {
 				for (i = 0; i < 65536; i++) {
-					hash = toeplitz_hash(rsskey, sizeof(rsskey), 
+					hash = toeplitz_vhash(rsskey, sizeof(rsskey),
 					    &src, addrlen,
 					    &dst, addrlen,
 					    &sport, sizeof(sport),
@@ -750,14 +750,14 @@ main(int argc, char *argv[])
 			printf("L3 cksum: 0x%04x (~0x%04x)\n", ntohs(l2pkt->info.l3csum), ~ntohs(l2pkt->info.l3csum) & 0xffff);
 		printf("L4 cksum: 0x%04x (~0x%04x)\n", ntohs(l2pkt->info.l4csum), ~ntohs(l2pkt->info.l4csum) & 0xffff);
 
-		uint32_t hash = toeplitz_hash(rsskey, sizeof(rsskey), 
+		uint32_t hash = toeplitz_vhash(rsskey, sizeof(rsskey),
 		    &l2pkt->info.src, addrsize,
 		    &l2pkt->info.dst, addrsize,
 		    NULL);
 		printf("RssHash(2-tuple): 0x%08x\n", hash);
 
 		if (PROTO_HAS_PORT(l2pkt->info.proto)) {
-			uint32_t hash_p = toeplitz_hash(rsskey, sizeof(rsskey), 
+			uint32_t hash_p = toeplitz_vhash(rsskey, sizeof(rsskey),
 			    &l2pkt->info.src, addrsize,
 			    &l2pkt->info.dst, addrsize,
 			    &l2pkt->info.sport, sizeof(l2pkt->info.sport),
