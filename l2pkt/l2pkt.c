@@ -38,6 +38,7 @@
 #include <net/bpf.h>
 #include <net/if.h>
 #include <net/if_ether.h>
+#include <net/if_llc.h>
 #include <arpa/inet.h>
 
 #include "libl2pkt.h"
@@ -58,7 +59,6 @@ static int opt_v;
 static int opt_bad_ip4csum = 0;
 static int opt_bad_l4csum = 0;
 static struct l2pkt *l2pkt;
-static int vlanid = -1;
 
 
 struct option long_options[] = {
@@ -87,6 +87,8 @@ usage()
 	fprintf(stderr, "	-D <etheraddr>		destination mac address (default: ff:ff:ff:ff:ff:ff)\n");
 	fprintf(stderr, "	-S <etheraddr>		source mac address (default: own addr)\n");
 	fprintf(stderr, "	-V <vid>		VLAN ID\n");
+	fprintf(stderr, "	-Q <vid>		VLAN ID (QinQ)\n");
+	fprintf(stderr, "	-L			LLC/SNAP encapsulation\n");
 	fprintf(stderr, "	-X			dump generated packet\n");
 //	fprintf(stderr, "	-a			build arp query packet\n");
 	fprintf(stderr, "	-4			build IPv4 packet\n");
@@ -195,10 +197,24 @@ parsenum(const char *str, int *v, long long min, long long max)
 	return 0;
 }
 
+TAILQ_HEAD(encap_list, encaparg);
+
+struct encaparg {
+	TAILQ_ENTRY(encaparg) encaparg_list;
+	enum {
+		ENCAPTYPE_VLAN,
+		ENCAPTYPE_QINQ,
+		ENCAPTYPE_LLC_SNAP
+	} type;
+	uint16_t vlanid;
+};
+
 int
 main(int argc, char *argv[])
 {
 	struct ether_addr *eaddr, eaddr_src, eaddr_dst;
+	struct encap_list encaplist = TAILQ_HEAD_INITIALIZER(encaplist);
+	struct encaparg *encaparg, *encaparg2;
 	int ether_header_size;
 	ssize_t r;
 	int npacket = 1;
@@ -231,13 +247,15 @@ main(int argc, char *argv[])
 	int packetsize = -1;
 	int framesize = -1;
 	int ethertype = 0x88b5;	/* IEEE Std 802 - Local Experimental Ethertype */
+	int vlanid;
 	char *ifname = NULL;
 	int opt_tcpflags = -1;
+
 
 	memset(&eaddr_src, 0x00, sizeof(eaddr_src));
 	memset(&eaddr_dst, 0xff, sizeof(eaddr_dst));
 
-	while ((ch = getopt_long(argc, argv, "46D:R:S:TXf:i:t:n:rs:V:v", long_options, NULL)) != -1) {
+	while ((ch = getopt_long(argc, argv, "46D:LQ:R:S:TV:Xf:i:t:n:rs:v", long_options, NULL)) != -1) {
 		switch (ch) {
 		case 0:
 			if (optind < 2) {
@@ -389,6 +407,12 @@ main(int argc, char *argv[])
 				memcpy(&eaddr_src, eaddr, sizeof(eaddr_src));
 			}
 			break;
+		case 'L':
+			encaparg = malloc(sizeof(*encaparg));
+			memset(encaparg, 0, sizeof(*encaparg));
+			encaparg->type = ENCAPTYPE_LLC_SNAP;
+			TAILQ_INSERT_TAIL(&encaplist, encaparg, encaparg_list);
+			break;
 		case 'T':
 			opt_timestamp++;
 			break;
@@ -425,8 +449,16 @@ main(int argc, char *argv[])
 			opt_v++;
 			break;
 		case 'V':
+		case 'Q':
 			if (parsenum(optarg, &vlanid, 0, 65535) != 0)
 				errx(1, "illegal vlan id: %s", optarg);
+
+			encaparg = malloc(sizeof(*encaparg));
+			memset(encaparg, 0, sizeof(*encaparg));
+			encaparg->type = (ch == 'Q') ? ENCAPTYPE_QINQ : ENCAPTYPE_VLAN;
+			encaparg->vlanid = vlanid;
+			TAILQ_INSERT_TAIL(&encaplist, encaparg, encaparg_list);
+
 			break;
 		default:
 			usage();
@@ -438,11 +470,7 @@ main(int argc, char *argv[])
 	if ((argc != 0) || (ifname == NULL))
 		usage();
 
-
 	ether_header_size = sizeof(struct ether_header);
-	if (vlanid != -1)
-		ether_header_size += 4;
-
 	if ((framesize == -1) && (packetsize == -1)) {
 		packetsize = 46;
 		framesize = packetsize + ether_header_size;
@@ -480,8 +508,8 @@ main(int argc, char *argv[])
 	}
 
 	l2pkt_setframesize(l2pkt, framesize);
-	if (vlanid != -1)
-		l2pkt_ethpkt_vlan(l2pkt, vlanid);
+//	if (vlanid != -1)
+//		l2pkt_ethpkt_vlan(l2pkt, vlanid);
 	l2pkt_ethpkt_type(l2pkt, ethertype);
 	l2pkt_ethpkt_src(l2pkt, &eaddr_src);
 	l2pkt_ethpkt_dst(l2pkt, &eaddr_dst);
@@ -792,13 +820,37 @@ main(int argc, char *argv[])
 		}
 
 		printf("\n");
-		printf("framesize:  %d bytes\n", framesize);
-		printf("packetsize: %d bytes\n", packetsize);
+		if (!TAILQ_EMPTY(&encaplist)) {
+			printf("before encapsulation\n");
+			printf("L2 framesize:  %d bytes\n", framesize);
+			printf("L3 packetsize: %d bytes\n", packetsize);
+		}
+	}
+
+	TAILQ_FOREACH_REVERSE_SAFE(encaparg, &encaplist, encap_list, encaparg_list, encaparg2) {
+		switch (encaparg->type) {
+		case ENCAPTYPE_VLAN:
+			l2pkt_ethpkt_encap_vlan(l2pkt, ETHERTYPE_VLAN, encaparg->vlanid);
+//			L2PKT_L2SIZE(l2pkt) -= 4;
+			break;
+		case ENCAPTYPE_QINQ:
+			l2pkt_ethpkt_encap_vlan(l2pkt, ETHERTYPE_QINQ, encaparg->vlanid);
+//			L2PKT_L2SIZE(l2pkt) -= 4;
+			break;
+		case ENCAPTYPE_LLC_SNAP:
+			l2pkt_ethpkt_encap_llc_snap(l2pkt);
+//			L2PKT_L2SIZE(l2pkt) -= 8;
+			break;
+		}
 	}
 
 	if (opt_hexdump) {
-		printf("L2 framesize = %d, L3 packetsize = %d\n", framesize, packetsize);
-		packetdump(L2PKT_L2BUF(l2pkt), framesize, (opt_hexdump == 1));
+		if (!TAILQ_EMPTY(&encaplist))
+			printf("after encapsulation\n");
+
+		printf("L2 framesize:  %d bytes\n", L2PKT_L2SIZE(l2pkt));
+		printf("L3 packetsize: %d bytes\n", L2PKT_L3SIZE(l2pkt));
+		packetdump(L2PKT_L2BUF(l2pkt), L2PKT_L2SIZE(l2pkt), (opt_hexdump == 1));
 	}
 
 	for (nsend = 0; nsend < npacket; nsend++) {

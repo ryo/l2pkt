@@ -35,6 +35,7 @@ l2pkt_init(struct l2pkt *l2pkt, int framesize)
 		return -1;
 
 	memset(l2pkt, 0, sizeof(*l2pkt));
+	l2pkt->l2hdrsize = sizeof(struct ether_header);
 	l2pkt->framesize = framesize;
 	return 0;
 }
@@ -51,6 +52,7 @@ l2pkt_create(int framesize)
 	l2pkt = malloc(sizeof(struct l2pkt));
 	if (l2pkt != NULL) {
 		memset(l2pkt, 0, sizeof(*l2pkt));
+		l2pkt->l2hdrsize = sizeof(struct ether_header);
 		l2pkt->framesize = framesize;
 	}
 

@@ -52,15 +52,59 @@ l2pkt_ethpkt_template(struct l2pkt *l2pkt)
 }
 
 int
-l2pkt_ethpkt_vlan(struct l2pkt *l2pkt, uint16_t tag)
+l2pkt_ethpkt_encap_vlan(struct l2pkt *l2pkt, uint16_t encap_proto, uint16_t tag)
 {
 	struct ether_vlan_header *evl;
+	char *p;
+
+	p = L2PKT_BUFFER(l2pkt);
+	memmove(
+	    p + ETHER_ADDR_LEN * 2 + 4,
+	    p + ETHER_ADDR_LEN * 2,
+	    sizeof(L2PKT_BUFFER(l2pkt)) - 4);
 
 	evl = (struct ether_vlan_header *)L2PKT_BUFFER(l2pkt);
-	evl->evl_encap_proto = htons(ETHERTYPE_VLAN);
+	evl->evl_encap_proto = htons(encap_proto);
 	evl->evl_tag = htons(tag);
+
+	L2PKT_L2HEADERSIZE(l2pkt) += 4;
+	L2PKT_L2SIZE(l2pkt) += 4;
+
 	return 0;
 }
+
+int
+l2pkt_ethpkt_encap_llc_snap(struct l2pkt *l2pkt)
+{
+	struct ether_header *eh;
+	struct llc *llc;
+	char *p;
+
+	p = L2PKT_BUFFER(l2pkt);
+	memmove(
+	    p + ETHER_ADDR_LEN * 2 + 8,
+	    p + ETHER_ADDR_LEN * 2,
+	    sizeof(L2PKT_BUFFER(l2pkt)) - 8);
+
+	eh = (struct ether_header *)L2PKT_BUFFER(l2pkt);
+
+	llc = (struct llc *)(eh + 1);
+	llc->llc_dsap = LLC_SNAP_LSAP;
+	llc->llc_ssap = LLC_SNAP_LSAP;
+	llc->llc_control = LLC_UI;
+	llc->llc_un.type_snap.org_code[0] = 0;
+	llc->llc_un.type_snap.org_code[1] = 0;
+	llc->llc_un.type_snap.org_code[2] = 0;
+	llc->llc_un.type_snap.ether_type = eh->ether_type;
+
+	eh->ether_type = htons(L2PKT_L2SIZE(l2pkt) - 6);
+
+	L2PKT_L2HEADERSIZE(l2pkt) += 8;
+	L2PKT_L2SIZE(l2pkt) += 8;
+
+	return 0;
+}
+
 
 int
 l2pkt_ethpkt_type(struct l2pkt *l2pkt, uint16_t type)
