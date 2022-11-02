@@ -29,6 +29,8 @@
  * SUCH DAMAGE.
  */
 
+#ifdef __x86_64__
+
 #include <machine/asm.h>
 #include "assym_dummy_mbuf.h"
 
@@ -300,3 +302,5 @@ END(cpu_in_cksum)
 .Mout_of_mbufs_msg:
 	.string		"in_cksum: out of data\n"
 END(.Mout_of_mbufs_msg)
+
+#endif /* __x86_64__ */

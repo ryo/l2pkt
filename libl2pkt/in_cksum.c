@@ -89,7 +89,7 @@ in6_cksum(struct in6_addr *src, struct in6_addr *dst, int proto, char *data, uns
 	return in_cksum(sum, data, len);
 }
 
-#ifdef USE_CPU_IN_CKSUM
+#ifdef __x86_64__
 int cpu_in_cksum(void *, int, int, uint32_t);
 
 unsigned int
@@ -103,7 +103,7 @@ in_cksum(unsigned int sum0, char *data, unsigned int len)
 
 	return cpu_in_cksum(&dummy_mbuf, len, 0, sum0);
 }
-#else /* USE_CPU_IN_CKSUM */
+#else /* __x86_64__ */
 unsigned int
 in_cksum(unsigned int sum, char *data, unsigned int len)
 {
@@ -134,4 +134,4 @@ in_cksum(unsigned int sum, char *data, unsigned int len)
 	sum = (sum >> 16) + (sum & 0xffff);
 	return ~(sum & 0xffff);
 }
-#endif /* USE_CPU_IN_CKSUM */
+#endif /* __x86_64__ */
