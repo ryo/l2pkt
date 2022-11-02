@@ -200,17 +200,17 @@ int l2pkt_ip4_tcp_template(struct l2pkt *, uint16_t);
 int l2pkt_ip6_src(struct l2pkt *, struct in6_addr *);
 int l2pkt_ip6_dst(struct l2pkt *, struct in6_addr *);
 int l2pkt_ip6_ttl(struct l2pkt *, uint8_t);
-int l2pkt_ip6_proto_template(struct l2pkt *, uint8_t, uint16_t);
-int l2pkt_ip6_icmp6_template(struct l2pkt *, uint16_t);
-int l2pkt_ip6_udp_template(struct l2pkt *, uint16_t);
-int l2pkt_ip6_tcp_template(struct l2pkt *, uint16_t);
+int l2pkt_ip6_proto_template(struct l2pkt *, uint8_t, const char *, unsigned int, uint8_t, uint16_t);
+int l2pkt_ip6_icmp6_template(struct l2pkt *, uint8_t, const char *, unsigned int, uint16_t);
+int l2pkt_ip6_udp_template(struct l2pkt *, uint8_t, const char *, unsigned int, uint16_t);
+int l2pkt_ip6_tcp_template(struct l2pkt *, uint8_t, const char *, unsigned int, uint16_t);
 int l2pkt_ip6_prepend_exthdr(struct l2pkt *, const char *, unsigned int);
 int l2pkt_ip6_off(struct l2pkt *, uint16_t, bool, uint16_t);
 
 /* l4pkt.c */
 int l2pkt_extract(struct l2pkt *);	/* extract to l2pkt->info */
 int l2pkt_getl3length(struct l2pkt *);
-int l2pkt_getl3hdrlength(struct l2pkt *);
+int l2pkt_getl3hdrlength(struct l2pkt *, uint8_t **);
 int l2pkt_getl4length(struct l2pkt *);
 int l2pkt_getl4protocol(struct l2pkt *);
 int l2pkt_getl4hdrlength(struct l2pkt *);

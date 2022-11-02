@@ -50,16 +50,70 @@ l2pkt_getl3length(struct l2pkt *l2pkt)
 }
 
 int
-l2pkt_getl3hdrlength(struct l2pkt *l2pkt)
+l2pkt_getl3hdrlength(struct l2pkt *l2pkt, uint8_t **nxtpp)
 {
 	struct ip *ip;
 
 	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
 	if (ip->ip_v == IPVERSION) {
+		if (nxtpp != NULL)
+			*nxtpp = &ip->ip_p;
 		return (ip->ip_hl * 4);
 	}
 	if (ip->ip_v == 6) {
-		return sizeof(struct ip6_hdr);	/* XXX */
+		struct ip6_hdr *ip6 = (struct ip6_hdr *)ip;
+		int protochain = 1;
+		uint8_t proto, *protop;
+		char *p;
+
+		p = (char *)(ip6 + 1);
+		protop = &ip6->ip6_nxt;
+		proto = ip6->ip6_nxt;
+		do {
+			switch (proto) {
+			case IPPROTO_FRAGMENT:
+				{
+					struct ip6_frag *ip6fragp = (struct ip6_frag *)p;
+					p += sizeof(struct ip6_frag);
+					protop = &ip6fragp->ip6f_nxt;
+					proto = ip6fragp->ip6f_nxt;
+					protochain = 0;
+				}
+				break;
+			case IPPROTO_ROUTING:
+				{
+					struct ip6_rthdr *ip6rthdrp = (struct ip6_rthdr *)p;
+					p += (ip6rthdrp->ip6r_len + 1) * 8;
+					protop = &ip6rthdrp->ip6r_nxt;
+					proto = ip6rthdrp->ip6r_nxt;
+				}
+				break;
+			case IPPROTO_DSTOPTS:
+			case IPPROTO_HOPOPTS:
+				{
+					struct ip6_ext *ip6extp = (struct ip6_ext *)p;
+					p += (ip6extp->ip6e_len + 1) * 8;
+					protop = &ip6extp->ip6e_nxt;
+					proto = ip6extp->ip6e_nxt;
+				}
+				break;
+			case IPPROTO_AH:
+				{
+					struct ip6_ext *ip6extp = (struct ip6_ext *)p;
+					p += (ip6extp->ip6e_len + 2) * 4;
+					protop = &ip6extp->ip6e_nxt;
+					proto = ip6extp->ip6e_nxt;
+				}
+				break;
+			default:
+				protochain = 0;
+				break;
+			}
+		} while (protochain != 0);
+
+		if (nxtpp != NULL)
+			*nxtpp = protop;
+		return p - (char *)ip6;
 	}
 
 	return 0;
@@ -68,18 +122,12 @@ l2pkt_getl3hdrlength(struct l2pkt *l2pkt)
 int
 l2pkt_getl4protocol(struct l2pkt *l2pkt)
 {
-	struct ip *ip;
-	struct ip6_hdr *ip6;
+	uint8_t *protop;
+	int l3hdrsize;
 
-	ip = (struct ip *)L2PKT_L3BUF(l2pkt);
-	if (ip->ip_v == IPVERSION)
-		return ip->ip_p;
-
-	if (ip->ip_v == 6) {
-		ip6 = (struct ip6_hdr *)ip;
-		/* XXX: TODO: add support IPv6 extension header */
-		return ip6->ip6_nxt;
-	}
+	l3hdrsize = l2pkt_getl3hdrlength(l2pkt, &protop);
+	if (l3hdrsize != 0)
+		return *protop;
 
 	return 0;
 }
@@ -98,7 +146,7 @@ l2pkt_getl4hdrlength(struct l2pkt *l2pkt)
 		return sizeof(struct udphdr);
 	case IPPROTO_TCP:
 		{
-			struct tcphdr *tcp = (struct tcphdr *)(L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt));
+			struct tcphdr *tcp = (struct tcphdr *)(L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt, NULL));
 			return (tcp->th_off * 4);
 		}
 	default:
@@ -214,8 +262,8 @@ l2pkt_l4write(struct l2pkt *l2pkt, unsigned int offset, char *data, unsigned int
 	uint8_t proto;
 
 	proto = l2pkt_getl4protocol(l2pkt);
-	sump = (uint16_t *)(L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt) + l2pkt_getl4csumoffset(l2pkt));
-	datap = L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt) + offset;
+	sump = (uint16_t *)(L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt, NULL) + l2pkt_getl4csumoffset(l2pkt));
+	datap = L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt, NULL) + offset;
 
 	sum = ~*sump & 0xffff;
 	{
@@ -269,7 +317,7 @@ l2pkt_l4write_raw(struct l2pkt *l2pkt, unsigned int offset, char *data, unsigned
 {
 	char *datap;
 
-	datap = L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt) + offset;
+	datap = L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt, NULL) + offset;
 
 	if (offset & 1) {
 		*datap++ = *data++;
@@ -295,7 +343,7 @@ l2pkt_l4read(struct l2pkt *l2pkt, unsigned int offset, char *data, unsigned int 
 {
 	char *datap;
 
-	datap = L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt) + offset;
+	datap = L2PKT_L3BUF(l2pkt) + l2pkt_getl3hdrlength(l2pkt, NULL) + offset;
 
 	if (offset & 1) {
 		*data++ = *datap++;

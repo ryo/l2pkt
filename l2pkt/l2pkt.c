@@ -70,6 +70,7 @@ struct option long_options[] = {
 	{ "fragoff",		required_argument,	NULL, 0 },
 	{ "srcport",		required_argument,	NULL, 0 },
 	{ "dstport",		required_argument,	NULL, 0 },
+	{ "exthdr",		required_argument,	NULL, 0 },
 	{ "ip4csum",		required_argument,	NULL, 0 },
 	{ "bad-ip4csum",	no_argument,		&opt_bad_ip4csum, 1 },
 	{ "l4csum",		required_argument,	NULL, 0 },
@@ -101,6 +102,7 @@ usage()
 	fprintf(stderr, "	--fragoff <offset>	fragment offset (default: 0)\n");
 	fprintf(stderr, "	--srcport <port>	source port\n");
 	fprintf(stderr, "	--dstport <port>	destination port\n");
+	fprintf(stderr, "	--exthdr <proto>,<data>	set IPv6 Extension Headers. (e.g., --exthdr 60,0000112233445566)\n");
 	fprintf(stderr, "	--ip4csum <sum>		specify IPv4 checksum\n"
 			"				(adjusting by modifying ip_id)\n");
 	fprintf(stderr, "	--bad-ip4csum		don't adjust IPv4 checksum\n");
@@ -197,6 +199,69 @@ parsenum(const char *str, int *v, long long min, long long max)
 	return 0;
 }
 
+static int
+parsehexdata(const char *str, char **datap, unsigned int *lenp)
+{
+#define MAXHEXDATASIZE	2048
+	char *data;
+	unsigned int len, x;
+
+	data = malloc(MAXHEXDATASIZE);
+	if (data == NULL) {
+		*datap = NULL;
+		*lenp = 0;
+		return -1;
+	}
+
+	memset(data, 0, MAXHEXDATASIZE);
+
+	for (len = 0; *str != '\0'; *str++) {
+		char c = *str;
+		if (c == '.' || c == ' ' || c == ':' || c == '-')
+			continue;
+		if (c >= '0' && c <= '9') {
+			x = c - '0';
+		} else if (c >= 'a' && c <= 'f') {
+			x = c - 'a' + 10;
+		} else if (c >= 'A' && c <= 'F') {
+			x = c - 'A' + 10;
+		} else {
+			return -1;
+		}
+
+		if ((len & 1) == 0) {
+			data[len / 2] |= (x << 4);
+		} else {
+			data[len / 2] |= x;
+		}
+		len++;
+	}
+
+	*datap = data;
+	*lenp = len / 2;
+
+	return 0;
+}
+
+static int
+parseexthdr(const char *str, uint8_t *exthdr_proto, char **datap, unsigned int *lenp)
+{
+	int proto;
+	char *p;
+
+	p = strchr(str, ',');
+	if (p == NULL)
+		return -1;
+	if (parsenum(str, &proto, 0, 0xff) != 0)
+		return -1;
+
+	if (parsehexdata(p + 1, datap, lenp) == 0) {
+		*exthdr_proto = proto;
+		return 0;
+	}
+	return -1;
+}
+
 TAILQ_HEAD(encap_list, encaparg);
 
 struct encaparg {
@@ -250,6 +315,9 @@ main(int argc, char *argv[])
 	int vlanid;
 	char *ifname = NULL;
 	int opt_tcpflags = -1;
+	char *opt_exthdr = NULL;
+	uint8_t opt_exthdr_proto;
+	unsigned int opt_exthdr_len = 0;
 
 
 	memset(&eaddr_src, 0x00, sizeof(eaddr_src));
@@ -307,6 +375,9 @@ main(int argc, char *argv[])
 					opt_dstport = true;
 					if (parsenum(optarg, &dstport, 0, 65535) != 0)
 						errx(1, "invalid dstport: %s", optarg);
+				} else if (strcmp("--exthdr", optname) == 0) {
+					if (parseexthdr(optarg, &opt_exthdr_proto, &opt_exthdr, &opt_exthdr_len) != 0)
+						errx(1, "invalid exthdr: %s", optarg);
 				} else if (strcmp("--fragoff", optname) == 0) {
 					if (parsenum(optarg, &opt_fragoff, 0, 0xffff) != 0)
 						errx(1, "invalid fragment offset: %s", optarg);
@@ -587,13 +658,13 @@ main(int argc, char *argv[])
 	} else if (opt_family == AF_INET6) {
 		switch (opt_protocol) {
 		case IPPROTO_UDP:
-			l2pkt_ip6_udp_template(l2pkt, packetsize - sizeof(struct ip6_hdr));
+			l2pkt_ip6_udp_template(l2pkt, opt_exthdr_proto, opt_exthdr, opt_exthdr_len, packetsize - sizeof(struct ip6_hdr) - opt_exthdr_len);
 			break;
 		case IPPROTO_TCP:
-			l2pkt_ip6_tcp_template(l2pkt, packetsize - sizeof(struct ip6_hdr));
+			l2pkt_ip6_tcp_template(l2pkt, opt_exthdr_proto, opt_exthdr, opt_exthdr_len, packetsize - sizeof(struct ip6_hdr) - opt_exthdr_len);
 			break;
 		case IPPROTO_ICMPV6:
-			l2pkt_ip6_icmp6_template(l2pkt, packetsize - sizeof(struct ip6_hdr));
+			l2pkt_ip6_icmp6_template(l2pkt, opt_exthdr_proto, opt_exthdr, opt_exthdr_len, packetsize - sizeof(struct ip6_hdr) - opt_exthdr_len);
 			break;
 		default:
 			if (opt_protocol == -1) {
@@ -602,7 +673,7 @@ main(int argc, char *argv[])
 				else
 					opt_protocol = IPPROTO_IP;
 			}
-			l2pkt_ip6_proto_template(l2pkt, opt_protocol, packetsize - sizeof(struct ip6_hdr));
+			l2pkt_ip6_proto_template(l2pkt, opt_exthdr_proto, opt_exthdr, opt_exthdr_len, opt_protocol, packetsize - sizeof(struct ip6_hdr) - opt_exthdr_len);
 			break;
 		}
 
