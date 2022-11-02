@@ -161,6 +161,16 @@ l2pkt_ip6_dst(struct l2pkt *l2pkt, struct in6_addr *addr)
 }
 
 int
+l2pkt_ip6_ttl(struct l2pkt *l2pkt, uint8_t ttl)
+{
+	struct ip6_hdr *ip6;
+
+	ip6 = (struct ip6_hdr *)L2PKT_L3BUF(l2pkt);
+	ip6->ip6_hlim = ttl;
+	return 0;
+}
+
+int
 l2pkt_ip6_prepend_exthdr(struct l2pkt *l2pkt, const char *exthdr, unsigned int exthdrlen)
 {
 	struct ip6_hdr *ip6;

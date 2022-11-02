@@ -199,6 +199,7 @@ int l2pkt_ip4_tcp_template(struct l2pkt *, uint16_t);
 /* ip6pkt.c */
 int l2pkt_ip6_src(struct l2pkt *, struct in6_addr *);
 int l2pkt_ip6_dst(struct l2pkt *, struct in6_addr *);
+int l2pkt_ip6_ttl(struct l2pkt *, uint8_t);
 int l2pkt_ip6_proto_template(struct l2pkt *, uint8_t, uint16_t);
 int l2pkt_ip6_icmp6_template(struct l2pkt *, uint16_t);
 int l2pkt_ip6_udp_template(struct l2pkt *, uint16_t);

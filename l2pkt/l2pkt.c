@@ -606,8 +606,8 @@ main(int argc, char *argv[])
 			break;
 		}
 
-//		if (opt_ttl > 0)
-//			l2pkt_ip6_ttl(l2pkt, opt_ttl);
+		if (opt_ttl > 0)
+			l2pkt_ip6_ttl(l2pkt, opt_ttl);
 
 		if (opt_ip6src)
 			l2pkt_ip6_src(l2pkt, &ip6src);
