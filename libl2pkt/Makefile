@@ -1,5 +1,6 @@
 CFLAGS+=	-Wall
 LIB=	l2pkt
+MKPIC=	no
 INTERNALLIB=
 
 SRCS+=	l2pkt.c
